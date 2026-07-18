@@ -257,13 +257,20 @@ Validar con una feature real: planificar con `/speckit-specify-auto` y dejar que
 Este proyecto se empaqueta como repositorio instalable **igual que el spec-kit original**:
 
 ```powershell
-# spec-kit original:
+# 1) Herramienta oficial de spec-kit (una sola vez por máquina):
 uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
 
-# este repo (spec-kit + mejoras multi-CLI):
-uv tool install ... --from git+https://github.com/tOMAS-gen/gen_speckit.git
-specify init . --integration claude   # misma inicialización de siempre
+# 2) En la carpeta de tu proyecto — inicializa spec-kit oficial Y agrega las
+#    mejoras multi-CLI en un solo paso:
+irm https://raw.githubusercontent.com/tOMAS-gen/gen_speckit/main/install.ps1 | iex
 ```
+
+El instalador corre el `specify init` oficial (si el proyecto no está inicializado) y
+después copia **solo el producto** según un manifiesto explícito: las 8 skills
+multi-CLI, los playbooks de `.specify/orchestrator/`, los 6 scripts, el catálogo de
+CLIs y los punteros de portabilidad. **Nada del desarrollo de este repo** (specs,
+constitución, agentes, tests, CI) llega a tu proyecto. Desde un clon local:
+`.\install.ps1 -Destino C:\mi-proyecto`.
 
 - **Compatibilidad total**: todo lo que hace spec-kit sigue funcionando igual (mismas skills base, mismos comandos, misma estructura `.specify/`).
 - **Solo se agregan funciones**: los pipelines `/speckit-specify-auto` y `/speckit-specify-auto-eco`, el triage, `/speckit-models`, el asignador y el orquestador multi-CLI.

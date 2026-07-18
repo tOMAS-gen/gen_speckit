@@ -146,7 +146,7 @@ Extensión de tooling sobre el repo spec-kit (sin `src/` de aplicación): skills
 ### Implementation for User Story 6
 
 - [x] T028 [P] [US6] Actualizar `README.md`: estado real de los pasos 3–6, comandos nuevos (`/speckit-models`, `/speckit-specify-auto-eco`, `/speckit-orchestrate`), instrucciones de instalación desde este repo y nota de compatibilidad
-- [ ] T029 [US6] Verificar la instalación en un proyecto de prueba limpio según el escenario 6 de `specs/001-multi-cli-orchestrator/quickstart.md`: gesto de instalación equivalente al original, estructura `.specify/` estándar, skills base sin cambios de comportamiento, skills nuevas disponibles; documentar el resultado en el README si hay pasos adicionales
+- [x] T029 [US6] Verificar la instalación en un proyecto de prueba limpio según el escenario 6 de `specs/001-multi-cli-orchestrator/quickstart.md`: gesto de instalación equivalente al original, estructura `.specify/` estándar, skills base sin cambios de comportamiento, skills nuevas disponibles; documentar el resultado en el README si hay pasos adicionales
 - [x] T033 [P] [US6] Crear los puntos de entrada nativos para Codex y Kimi como principal (FR-020): `.codex/prompts/speckit-orchestrate.md` (o entrada equivalente en `AGENTS.md`) y el equivalente de Kimi CLI, cada uno como adaptador fino que instruye leer y ejecutar los playbooks de `.specify/orchestrator/` (mismo contrato que la skill de Claude, sin lógica duplicada); validar la aceptación 5 del escenario 5 del quickstart desde al menos un CLI no-Claude
 
 **Checkpoint**: distribuible
