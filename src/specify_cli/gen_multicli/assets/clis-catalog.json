@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "patrones_cuota_genericos": [
+    "rate limit",
+    "quota",
+    "429",
+    "usage limit"
+  ],
+  "clis": {
+    "claude": {
+      "headless": "claude -p \"{prompt}\" --dangerously-skip-permissions --output-format json",
+      "version_cmd": "--version",
+      "auth_hints": {
+        "windows": [
+          "%USERPROFILE%\\.claude\\.credentials.json",
+          "%USERPROFILE%\\.claude.json"
+        ],
+        "linux": [
+          "~/.claude/.credentials.json",
+          "~/.claude.json"
+        ],
+        "macos": [
+          "~/.claude/.credentials.json",
+          "~/.claude.json"
+        ]
+      },
+      "patrones_cuota": [
+        "usage limit",
+        "rate limit",
+        "quota",
+        "limit reached",
+        "429"
+      ],
+      "modelos_semilla": [
+        {
+          "id": "fable",
+          "capacidad": 10,
+          "costo": 3,
+          "contexto_k": "desconocido"
+        },
+        {
+          "id": "opus",
+          "capacidad": 9,
+          "costo": 3,
+          "contexto_k": 200
+        },
+        {
+          "id": "sonnet",
+          "capacidad": 7,
+          "costo": 2,
+          "contexto_k": 200
+        },
+        {
+          "id": "haiku",
+          "capacidad": 5,
+          "costo": 1,
+          "contexto_k": 200
+        }
+      ],
+      "quirks": []
+    },
+    "codex": {
+      "headless": "codex exec \"{prompt}\" --sandbox danger-full-access --skip-git-repo-check --json",
+      "version_cmd": "--version",
+      "exe_hints": [
+        "%APPDATA%\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe"
+      ],
+      "auth_hints": {
+        "windows": [
+          "%USERPROFILE%\\.codex\\auth.json"
+        ],
+        "linux": [
+          "~/.codex/auth.json"
+        ],
+        "macos": [
+          "~/.codex/auth.json"
+        ]
+      },
+      "patrones_cuota": [
+        "rate limit",
+        "usage",
+        "quota exceeded",
+        "429",
+        "plan limit"
+      ],
+      "modelos_semilla": [
+        {
+          "id": "gpt-5.6-sol",
+          "capacidad": 9,
+          "costo": 3,
+          "contexto_k": 272
+        },
+        {
+          "id": "gpt-5.6-terra",
+          "capacidad": 7,
+          "costo": 2,
+          "contexto_k": 272
+        },
+        {
+          "id": "gpt-5.6-luna",
+          "capacidad": 5,
+          "costo": 1,
+          "contexto_k": 272
+        },
+        {
+          "id": "gpt-5.5",
+          "capacidad": 7,
+          "costo": 2,
+          "contexto_k": 272
+        }
+      ],
+      "quirks": [
+        "codex 0.144+ no acepta --ask-for-approval: exec ya es no-interactivo por defecto; usar --sandbox danger-full-access.",
+        "codex exec espera stdin: cerrarlo con el null device (< /dev/null en bash, < NUL en cmd) para que no se quede bloqueado.",
+        "--sandbox workspace-write monta el directorio en solo lectura cuando el proyecto no es un repo git; usar danger-full-access dentro del repo.",
+        "El binario nativo vive dentro del paquete npm en node_modules/@openai/codex-win32-x64 (wrapper .cmd/.ps1 en el PATH de npm)."
+      ]
+    },
+    "kimi": {
+      "headless": "kimi -p \"{prompt}\" --model kimi-code/{modelo} --output-format text",
+      "version_cmd": "--version",
+      "auth_hints": {
+        "windows": [
+          "%USERPROFILE%\\.kimi-code\\credentials\\kimi-code.json",
+          "%USERPROFILE%\\.kimi\\credentials.json"
+        ],
+        "linux": [
+          "~/.kimi-code/credentials/kimi-code.json",
+          "~/.kimi/credentials.json"
+        ],
+        "macos": [
+          "~/.kimi-code/credentials/kimi-code.json",
+          "~/.kimi/credentials.json"
+        ]
+      },
+      "patrones_cuota": [
+        "rate limit",
+        "quota",
+        "429",
+        "insufficient.*balance"
+      ],
+      "modelos_semilla": [
+        {
+          "id": "k3",
+          "capacidad": 8,
+          "costo": 2,
+          "contexto_k": 1024
+        },
+        {
+          "id": "kimi-for-coding",
+          "capacidad": 7,
+          "costo": 1,
+          "contexto_k": 256
+        },
+        {
+          "id": "kimi-for-coding-highspeed",
+          "capacidad": 6,
+          "costo": 1,
+          "contexto_k": 256
+        }
+      ],
+      "quirks": [
+        "kimi-code 0.27+: -p ya es no-interactivo y NO se combina con --yolo (conflicto de flags).",
+        "El flag --model usa alias calificados con prefijo kimi-code/ (config.toml: default_model = \"kimi-code/k3\")."
+      ]
+    }
+  }
+}

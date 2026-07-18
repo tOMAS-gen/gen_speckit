@@ -1,0 +1,79 @@
+name: gen_speckit validate (fork + producto multi-CLI)
+
+# Valida el fork en las 3 plataformas soportadas (SC-005): construye el wheel, corre la
+# suite pytest y un `specify init` de humo que comprueba que el producto multi-CLI se
+# entrega en un solo paso (base + producto).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel
+        run: uv build --wheel
+
+      - name: Run Python test suite
+        run: uv run --no-project --with pytest python -m pytest tests/python/ -q
+
+      - name: Validate get_parallel_groups.py JSON output
+        shell: bash
+        run: |
+          set -e
+          uv run --no-project python .specify/scripts/python/get_parallel_groups.py \
+            --tasks-path specs/005-python-scripts-port/tasks.md \
+            > "$RUNNER_TEMP/parallel-groups.json"
+          uv run --no-project python -m json.tool "$RUNNER_TEMP/parallel-groups.json" > /dev/null
+
+      - name: Validate scan_models.py JSON output without PowerShell
+        shell: bash
+        run: |
+          set -e
+          SCAN_ROOT="$RUNNER_TEMP/scan-models-repo"
+          rm -rf "$SCAN_ROOT"
+          mkdir -p "$SCAN_ROOT/.specify"
+          cp .specify/clis-catalog.json "$SCAN_ROOT/.specify/clis-catalog.json"
+          uv run --no-project python .specify/scripts/python/scan_models.py \
+            --repo-root "$SCAN_ROOT" \
+            --json \
+            > "$RUNNER_TEMP/scan-models.json"
+          uv run --no-project python -m json.tool "$RUNNER_TEMP/scan-models.json" > /dev/null
+
+      - name: Smoke — specify init entrega base + producto (un solo paso)
+        shell: bash
+        run: |
+          set -e
+          WHL=$(ls dist/*.whl | head -1)
+          WORK="$RUNNER_TEMP/gen-e2e"
+          rm -rf "$WORK"; mkdir -p "$WORK"; cd "$WORK"
+          uv run --no-project --reinstall --with "$GITHUB_WORKSPACE/$WHL" \
+            specify init demo --integration claude --script ps --ignore-agent-tools
+          cd demo
+          test -f .specify/orchestrator/triage.md
+          test -f .specify/clis-catalog.json
+          test -f AGENTS.md
+          for s in speckit-models speckit-clis speckit-agents speckit-readme \
+                   speckit-orchestrate speckit-constitution-plus \
+                   speckit-specify-auto speckit-specify-auto-eco; do
+            test -f ".claude/skills/$s/SKILL.md"
+          done
+          for k in scan-models invoke-secondary update-quota get-parallel-groups \
+                   clis-config platform; do
+            test -f ".specify/scripts/powershell/$k.ps1"
+          done
+          echo "OK: base + producto multi-CLI entregados por un solo specify init"

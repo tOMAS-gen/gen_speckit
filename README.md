@@ -254,28 +254,29 @@ Validar con una feature real: planificar con `/speckit-specify-auto` y dejar que
 
 ## Distribución
 
-Este proyecto se empaqueta como repositorio instalable **igual que el spec-kit original**:
+Este repositorio **es un fork del spec-kit oficial** con las mejoras multi-CLI
+integradas dentro del propio `specify-cli`. Se instala y se usa **con el mismo gesto de
+siempre** — pero un único `specify init` deja base + producto multi-CLI, **todo de una**:
 
 ```powershell
-# 1) Herramienta oficial de spec-kit (una sola vez por máquina):
-uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
+# 1) Instalar el spec-kit de gen (una sola vez por máquina; reemplaza al specify oficial):
+uv tool install specify-cli --force --from git+https://github.com/tOMAS-gen/gen_speckit.git
+specify version   # verificar
 
-# 2) En la carpeta de tu proyecto — inicializa spec-kit oficial Y agrega las
-#    mejoras multi-CLI en un solo paso:
-irm https://raw.githubusercontent.com/tOMAS-gen/gen_speckit/main/install.ps1 | iex
+# 2) En la carpeta de tu proyecto — un solo init entrega base + mejoras multi-CLI:
+specify init . --integration claude --script ps
 ```
 
-El instalador corre el `specify init` oficial (si el proyecto no está inicializado) y
-después copia **solo el producto** según un manifiesto explícito: las 8 skills
-multi-CLI, los playbooks de `.specify/orchestrator/`, los 6 scripts, el catálogo de
-CLIs y los punteros de portabilidad. **Nada del desarrollo de este repo** (specs,
-constitución, agentes, tests, CI) llega a tu proyecto.
+No hay segundo paso ni `install.ps1`: las 8 skills multi-CLI, los playbooks de
+`.specify/orchestrator/`, los 6 scripts, el catálogo de CLIs y los punteros de
+portabilidad vienen **bundleados dentro del CLI** y los deposita el propio `init`.
+**Nada del desarrollo de este repo** (specs, constitución de gen, agentes, tests, CI)
+llega a tu proyecto.
 
-**Elegís tu agente principal, como en el original.** Las skills multi-CLI se instalan
-en el formato y ubicación del agente que elijas con `-Skills` (por defecto, el mismo
-de `-Integracion`):
+**Elegís tu agente principal, como en el original.** Con `--skills` decidís a qué
+agente(s) van las skills multi-CLI (por defecto, el mismo de `--integration`):
 
-| Valor | Dónde quedan las skills |
+| Valor de `--skills` | Dónde quedan las skills |
 |---|---|
 | `claude` (default) | `.claude/skills/<nombre>/SKILL.md` |
 | `kimi` | `.kimi/skills/<nombre>/SKILL.md` (mismo formato SKILL.md) |
@@ -283,23 +284,27 @@ de `-Integracion`):
 | `todos` | los tres a la vez |
 
 ```powershell
-# ejemplos desde un clon local:
-.\install.ps1 -Destino C:\mi-proyecto                     # claude (default)
-.\install.ps1 -Destino C:\mi-proyecto -Skills kimi        # kimi como principal
-.\install.ps1 -Destino C:\mi-proyecto -Skills todos       # los tres agentes
+specify init . --integration claude --script ps                  # claude (default)
+specify init . --integration claude --script ps --skills kimi     # skills para kimi
+specify init . --integration claude --script ps --skills todos     # los tres agentes
 ```
 
-- **Compatibilidad total**: todo lo que hace spec-kit sigue funcionando igual (mismas skills base, mismos comandos, misma estructura `.specify/`).
+- **Compatibilidad total**: todo lo que hace spec-kit sigue funcionando igual (mismas skills base, mismos comandos, misma estructura `.specify/`, mismas opciones del `init`).
 - **Solo se agregan funciones**: los pipelines `/speckit-specify-auto` y `/speckit-specify-auto-eco`, el triage, `/speckit-models`, el asignador y el orquestador multi-CLI.
 - Quien conoce spec-kit no aprende nada nuevo; quien quiere las mejoras las obtiene con el mismo gesto de instalación.
 
+> **Nota**: `install.ps1` quedó **deprecado** — su función (copiar el producto sobre un
+> `specify init` oficial) ahora la hace el `init` del fork. Se conserva solo por
+> transición y será removido.
+
 ## Requisitos
 
-- Windows 11 con PowerShell 5.1 o 7
-- Linux y macOS con PowerShell 7 (`pwsh`) instalado (`apt install powershell` / `brew install powershell`)
-- Para desarrollo (correr los tests) se necesita Pester 5 o superior (`Install-Module Pester`)
+- **Cualquier entorno con Python ≥3.11** (Windows / Linux / macOS). Los scripts de
+  soporte del orquestador están en **Python** — ya **no** hace falta PowerShell/`pwsh`.
 - [uv](https://docs.astral.sh/uv/) (gestor de paquetes de Python)
 - CLIs instalados: [Claude Code](https://claude.com/claude-code), Codex CLI, Kimi CLI
+- Para correr los tests: `pytest` (`uv run --with pytest ...`). Los scripts PowerShell
+  heredados (`.specify/scripts/powershell/`) quedan solo por transición.
 
 ## Estructura del proyecto
 

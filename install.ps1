@@ -33,6 +33,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoZip = 'https://github.com/tOMAS-gen/gen_speckit/archive/refs/heads/main.zip'
 
+# ----------------------------------------------------------------- DEPRECADO ---
+# gen_speckit es ahora un FORK del spec-kit oficial: el producto multi-CLI viene
+# integrado en el propio `specify-cli` y lo instala un unico `specify init`. Este
+# instalador de dos pasos quedo obsoleto y sera removido. Gesto recomendado:
+#   uv tool install specify-cli --force --from git+https://github.com/tOMAS-gen/gen_speckit.git
+#   specify init . --integration claude --script ps
+Write-Warning 'install.ps1 esta DEPRECADO. Usa el fork: `specify init` ya instala base + producto multi-CLI en un solo paso (ver README > Distribucion). Continuando de todas formas...'
+
 # ---------------------------------------------------------------- manifiesto ---
 $SkillsNuevas = @(
     'speckit-models', 'speckit-clis', 'speckit-agents', 'speckit-readme',
