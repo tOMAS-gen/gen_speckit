@@ -111,6 +111,19 @@ dinámicamente junto a los 3 del catálogo y lo mantuvo en `asignacion.baja` →
 real con `invoke-secondary` clasificado `exito` en el intento 1, con la salida del
 stub capturada en logs. **Cero ediciones de código para soportar el CLI nuevo.**
 
+**2026-07-18 — Escenario 4 (CI multiplataforma, SC-005) — run `99cab75` en GitHub Actions**:
+
+- **windows-latest: ✅ success** (76/76) · **ubuntu-latest: ✅ success** (76/76) ·
+  **macos-latest: en cola** al cierre de esta sesión (los runners macOS del plan
+  gratuito demoran; verificar en Actions del repo).
+- La CI encontró y se corrigieron 3 defectos reales de portabilidad que Windows solo
+  no podía revelar: (1) los tests de clis-config dependían del `models.json` local
+  (gitignoreado — no existe en CI) → inventario hermético; (2) pwsh 7 convierte
+  strings de fecha a `[datetime]` al parsear JSON → asserts sobre el JSON crudo;
+  (3) `%USERPROFILE%` no existe en Linux → variable de entorno propia del test.
+- SC-005 queda confirmado para Windows y Linux; macOS pendiente de que su job salga
+  de la cola (misma suite, mismas rutas unix que Ubuntu).
+
 ## Tests
 
 ```powershell

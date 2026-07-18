@@ -45,7 +45,7 @@
 | T014 | media | kimi/kimi-for-coding-highspeed | verificada |
 | T015 | baja | claude/haiku | verificada |
 | T016 | media | kimi/kimi-for-coding-highspeed | verificada |
-| T017 | media | claude/fable | pendiente (gate del usuario: push) |
+| T017 | media | claude/fable | verificada parcial (windows+ubuntu ✅; macos en cola de CI) |
 | T018 | baja | codex/gpt-5.6-luna | verificada |
 | T019 | media | claude/fable (reasignada, ver Eventos) | verificada |
 | T020 | baja | claude/fable (reasignada, ver Eventos) | verificada |
