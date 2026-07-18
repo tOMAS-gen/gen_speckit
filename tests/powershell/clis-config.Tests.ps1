@@ -4,12 +4,45 @@ BeforeAll {
     . (Join-Path $repoRoot '.specify\scripts\powershell\clis-config.ps1')
 
     function New-TestInventory {
+        # HERMETICO: models.json del repo esta gitignoreado (datos locales del
+        # usuario) y NO existe en CI — el inventario de prueba se genera aca.
+        # El catalogo si esta versionado y se copia con rutas portables.
         $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
         $subDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N').Substring(0, 8))
         $null = [System.IO.Directory]::CreateDirectory($subDir)
-        Copy-Item -Path (Join-Path $repoRoot '.specify\models.json') -Destination $subDir
-        Copy-Item -Path (Join-Path $repoRoot '.specify\clis-catalog.json') -Destination $subDir
-        Join-Path $subDir 'models.json'
+        Copy-Item -Path (Join-Path $repoRoot (Join-Path '.specify' 'clis-catalog.json')) -Destination $subDir
+        $inventory = @'
+{
+  "clis": {
+    "claude": {
+      "instalado": true, "autenticado": true, "version": "test",
+      "headless": "claude -p \"{prompt}\" --output-format json",
+      "plan": "desconocido", "cuota": "ok", "origen": "catalogo",
+      "modelos": [ { "id": "haiku", "capacidad": 5, "costo": 1, "contexto_k": 200 } ]
+    },
+    "codex": {
+      "instalado": true, "autenticado": true, "version": "test",
+      "headless": "codex exec \"{prompt}\" --json",
+      "plan": "desconocido", "cuota": "ok", "origen": "catalogo",
+      "modelos": [ { "id": "gpt-5.6-luna", "capacidad": 5, "costo": 1, "contexto_k": 272 } ]
+    },
+    "kimi": {
+      "instalado": true, "autenticado": true, "version": "test",
+      "headless": "kimi -p \"{prompt}\" --model kimi-code/{modelo}",
+      "plan": "desconocido", "cuota": "ok", "origen": "catalogo",
+      "modelos": [ { "id": "k3", "capacidad": 8, "costo": 2, "contexto_k": 1024 } ]
+    }
+  },
+  "asignacion": {
+    "alta": ["kimi/k3"],
+    "media": ["kimi/k3"],
+    "baja": ["claude/haiku", "codex/gpt-5.6-luna"]
+  }
+}
+'@
+        $modelsPath = Join-Path $subDir 'models.json'
+        [System.IO.File]::WriteAllText($modelsPath, $inventory, (New-Object System.Text.UTF8Encoding($false)))
+        $modelsPath
     }
 
     function New-PortableStub {
