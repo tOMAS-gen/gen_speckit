@@ -3,9 +3,13 @@
 .SYNOPSIS
   Invoca un CLI secundario en modo headless para ejecutar una tarea, con timeout,
   1 reintento ante fallo transitorio y clasificacion del resultado
-  (exito | cuota_agotada | indisponible) segun contracts/headless-adapters.md.
+  (exito | cuota_agotada | indisponible).
+.DESCRIPTION
+  GENERICO (feature 003): sin nombres de CLI en el codigo. El comando sale de la
+  plantilla headless del inventario; los patrones de cuota y hints de ejecutable se
+  resuelven inventario > catalogo > defaults genericos. La ejecucion es portable
+  (Windows/Linux/macOS) via platform.ps1.
 .NOTES
-  El comando concreto SIEMPRE sale de la plantilla headless de .specify/models.json.
   Dot-source para importar funciones sin ejecutar (tests).
 #>
 [CmdletBinding()]
@@ -23,21 +27,56 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-# Patrones de cuota agotada por CLI (contracts/headless-adapters.md; extensibles).
-$script:QuotaPatterns = @{
-    claude = @('usage limit', 'rate limit', 'quota', 'limit reached', '\b429\b')
-    codex  = @('rate limit', 'usage', 'quota exceeded', '\b429\b', 'plan limit')
-    kimi   = @('rate limit', 'quota', '\b429\b', 'insufficient.*balance')
+# Reusa helpers genericos (catalogo, JSON canonico) y de plataforma (transitivo).
+. (Join-Path (Split-Path -Parent $PSCommandPath) 'scan-models.ps1')
+
+function Get-CliDataValue {
+    # Resolucion generica inventario > catalogo para un campo de un CLI, tolerante a
+    # PSCustomObject o hashtable en cualquiera de las dos fuentes.
+    param($Inventory, $Catalog, [string]$Cli, [string]$Key, $Default = $null)
+    foreach ($source in @($Inventory, $Catalog)) {
+        if ($null -eq $source) { continue }
+        $plain = ConvertTo-PlainValue $source
+        if ($plain.Contains('clis') -and $plain['clis'].Contains($Cli)) {
+            $entry = $plain['clis'][$Cli]
+            if ($entry -is [System.Collections.IDictionary] -and $entry.Contains($Key) -and $null -ne $entry[$Key]) {
+                return $entry[$Key]
+            }
+        }
+    }
+    $Default
+}
+
+function Get-QuotaPatternsFor {
+    # Patrones de cuota agotada: inventario > catalogo del CLI > genericos del
+    # catalogo > respaldo interno (FR-012).
+    param($Inventory, $Catalog, [string]$Cli)
+    $patterns = Get-CliDataValue $Inventory $Catalog $Cli 'patrones_cuota' $null
+    if ($null -ne $patterns -and @($patterns).Count -gt 0) { return ,@($patterns) }
+    if ($null -ne $Catalog) {
+        $plain = ConvertTo-PlainValue $Catalog
+        if ($plain.Contains('patrones_cuota_genericos') -and @($plain['patrones_cuota_genericos']).Count -gt 0) {
+            return ,@($plain['patrones_cuota_genericos'])
+        }
+    }
+    ,@(Get-DefaultQuotaPatterns)
 }
 
 function Get-HeadlessCommand {
     # Construye el comando concreto desde la plantilla del inventario.
     param($Inventory, [string]$Cli, [string]$Model, [string]$Prompt)
-    $entry = $Inventory.clis.$Cli
-    if ($null -eq $entry) { throw "CLI '$Cli' no existe en el inventario" }
-    $template = $entry.headless
+    $plain = ConvertTo-PlainValue $Inventory
+    if (-not ($plain.Contains('clis') -and $plain['clis'].Contains($Cli))) {
+        throw "CLI '$Cli' no existe en el inventario"
+    }
+    $entry = $plain['clis'][$Cli]
+    $template = if ($entry.Contains('headless')) { [string]$entry['headless'] } else { '' }
     if ([string]::IsNullOrWhiteSpace($template)) { throw "CLI '$Cli' no tiene plantilla headless" }
-    $escapedPrompt = $Prompt -replace '"', '\"'
+    # Colapsar saltos de linea y espacios multiples: el wrapper ejecuta UNA linea de
+    # comando — un prompt con newline final la partiria en dos (bug real detectado:
+    # la segunda mitad se ejecutaba como comando basura y ensuciaba el exit code).
+    $sanitized = (($Prompt -replace '\s+', ' ').Trim())
+    $escapedPrompt = $sanitized -replace '"', '\"'
     $command = $template -replace '\{prompt\}', $escapedPrompt
     if ($command -match '\{modelo\}') {
         $command = $command -replace '\{modelo\}', $Model
@@ -48,66 +87,13 @@ function Get-HeadlessCommand {
 }
 
 function Test-QuotaPattern {
-    # $true si la salida matchea un patron de limite de uso del CLI dado.
-    param([string]$Cli, [string]$Text)
+    # $true si el texto matchea algun patron de limite de uso.
+    param([string[]]$Patterns, [string]$Text)
     if ([string]::IsNullOrEmpty($Text)) { return $false }
-    $patterns = $script:QuotaPatterns[$Cli]
-    if ($null -eq $patterns) { $patterns = $script:QuotaPatterns.Values | ForEach-Object { $_ } }
-    foreach ($p in $patterns) {
+    foreach ($p in $Patterns) {
         if ($Text -imatch $p) { return $true }
     }
     $false
-}
-
-function Resolve-CliExecutable {
-    # El wrapper corre en cmd.exe, cuyo PATH puede no incluir los CLIs instalados en
-    # rutas de usuario (exit 9009). Se reemplaza el primer token por la ruta completa
-    # de un ejecutable compatible con cmd (.exe/.cmd/.bat), si se puede resolver.
-    param([string]$Cli, [string]$Command)
-    # Caso especial: el shim npm de codex llama a `node` por nombre (falla cuando la
-    # resolucion por PATH esta restringida). El paquete trae un binario nativo: usarlo.
-    if ($Cli -eq 'codex') {
-        $native = Get-ChildItem "$env:APPDATA\npm\node_modules\@openai\codex" -Recurse -Filter 'codex.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($null -ne $native) {
-            return ($Command -replace "^\s*$([regex]::Escape($Cli))(?=\s)", "`"$($native.FullName)`"")
-        }
-    }
-    $candidates = @("$Cli.exe", "$Cli.cmd", "$Cli.bat", $Cli)
-    foreach ($c in $candidates) {
-        $info = Get-Command $c -ErrorAction SilentlyContinue | Where-Object { $_.Source -match '\.(exe|cmd|bat)$' } | Select-Object -First 1
-        if ($null -ne $info) {
-            return ($Command -replace "^\s*$([regex]::Escape($Cli))(?=\s)", "`"$($info.Source)`"")
-        }
-    }
-    $Command   # sin resolucion: se intenta tal cual (el fallo se clasificara normalmente)
-}
-
-function Invoke-HeadlessOnce {
-    # Una invocacion con timeout; stdout/stderr capturados a archivos (auditables).
-    # El comando corre via un wrapper .cmd: evita las reglas de comillas de `cmd /c`
-    # con rutas/argumentos entrecomillados, y deja el comando exacto como evidencia.
-    param([string]$Command, [int]$TimeoutSeconds, [string]$OutFile, [string]$ErrFile, [string]$WorkDir)
-    $wrapper = "$OutFile.cmd"
-    $batchCommand = $Command -replace '%', '%%'
-    # El wrapper hereda el PATH completo de esta sesion: los shims (npm codex.cmd ->
-    # node) y CLIs de usuario no siempre estan en el PATH del cmd hijo.
-    $pathLine = 'set "PATH=' + ($env:PATH -replace '%', '%%') + '"'
-    # `< NUL` cierra stdin (EOF inmediato): codex exec queda esperando stdin si el
-    # handle queda abierto y silencioso.
-    Set-Content -Path $wrapper -Value "@echo off`r`n$pathLine`r`n$batchCommand < NUL`r`nexit /b %ERRORLEVEL%" -Encoding Default
-    $proc = Start-Process -FilePath 'cmd.exe' -ArgumentList "/d /c `"$wrapper`"" `
-        -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile `
-        -WorkingDirectory $WorkDir -NoNewWindow -PassThru
-    # Capturar el handle ANTES de esperar: sin esto, .NET no expone ExitCode si el
-    # proceso ya termino (quedaria null y todo se clasificaria mal).
-    $null = $proc.Handle
-    $exited = $proc.WaitForExit($TimeoutSeconds * 1000)
-    if (-not $exited) {
-        # Matar el ARBOL de procesos: Kill() solo mata cmd.exe y deja huerfano al CLI.
-        try { & taskkill /T /F /PID $proc.Id 2>$null | Out-Null } catch { try { $proc.Kill() } catch { } }
-        return [pscustomobject]@{ exitCode = -1; timedOut = $true }
-    }
-    [pscustomobject]@{ exitCode = $proc.ExitCode; timedOut = $false }
 }
 
 function Invoke-SecondaryTask {
@@ -119,14 +105,23 @@ function Invoke-SecondaryTask {
     param(
         [string]$Cli, [string]$Model, [string]$Prompt,
         $Inventory,
+        $Catalog = $null,
         [string]$LogDir, [string]$LogBaseName = 'tarea',
         [int]$TimeoutSeconds = 900,
         [string]$WorkingDirectory = (Get-Location).Path
     )
     if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
     $command = Get-HeadlessCommand -Inventory $Inventory -Cli $Cli -Model $Model -Prompt $Prompt
-    $command = Resolve-CliExecutable -Cli $Cli -Command $command
 
+    # Resolver el ejecutable a ruta completa (el PATH de los hijos no es confiable);
+    # hints adicionales (p. ej. binarios dentro de paquetes) vienen de los datos.
+    $exeHints = @(Get-CliDataValue $Inventory $Catalog $Cli 'exe_hints' @())
+    $exe = Resolve-Executable -Name $Cli -ExeHints $exeHints
+    if ($null -ne $exe) {
+        $command = $command -replace "^\s*$([regex]::Escape($Cli))(?=\s)", "`"$exe`""
+    }
+
+    $patterns = Get-QuotaPatternsFor $Inventory $Catalog $Cli
     $intentos = 0
     $clasificacion = $null
     $lastExit = $null
@@ -136,7 +131,7 @@ function Invoke-SecondaryTask {
         $intentos++
         $outFile = Join-Path $LogDir "$LogBaseName.intento$intentos.out.log"
         $errFile = Join-Path $LogDir "$LogBaseName.intento$intentos.err.log"
-        $r = Invoke-HeadlessOnce -Command $command -TimeoutSeconds $TimeoutSeconds `
+        $r = Invoke-PortableProcess -Command $command -TimeoutSeconds $TimeoutSeconds `
             -OutFile $outFile -ErrFile $errFile -WorkDir $WorkingDirectory
         $lastExit = $r.exitCode
         $texto = ''
@@ -144,7 +139,7 @@ function Invoke-SecondaryTask {
         if (Test-Path $errFile) { $texto += "`n" + (Get-Content $errFile -Raw) }
 
         if (-not $r.timedOut -and $r.exitCode -eq 0) { $clasificacion = 'exito'; break }
-        if (Test-QuotaPattern -Cli $Cli -Text $texto) { $clasificacion = 'cuota_agotada'; break }
+        if (Test-QuotaPattern -Patterns $patterns -Text $texto) { $clasificacion = 'cuota_agotada'; break }
         # Fallo transitorio (timeout incluido): 1 reintento; al segundo, indisponible.
         if ($intentos -ge 2) { $clasificacion = 'indisponible' }
     }
@@ -163,9 +158,11 @@ if ($MyInvocation.InvocationName -ne '.') {
     foreach ($req in @('Cli', 'Prompt', 'ModelsPath', 'LogDir')) {
         if (-not (Get-Variable $req -ValueOnly)) { throw "Falta -$req" }
     }
-    $inventory = Get-Content $ModelsPath -Raw | ConvertFrom-Json
+    $inventory = Get-Content $ModelsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath)))
+    $catalog = Get-CliCatalog -RepoRoot $repoRoot 3>$null
     $result = Invoke-SecondaryTask -Cli $Cli -Model $Model -Prompt $Prompt -Inventory $inventory `
-        -LogDir $LogDir -LogBaseName $LogBaseName -TimeoutSeconds $TimeoutSeconds `
+        -Catalog $catalog -LogDir $LogDir -LogBaseName $LogBaseName -TimeoutSeconds $TimeoutSeconds `
         -WorkingDirectory $WorkingDirectory
     ConvertTo-Json -InputObject $result -Depth 4
     if ($result.clasificacion -ne 'exito') { exit 1 } else { exit 0 }

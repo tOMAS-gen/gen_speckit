@@ -33,8 +33,9 @@ _Actualizado: 2026-07-18_
 
 | Feature | Fase | Avance |
 |---|---|---|
-| 001 — Orquestador Multi-CLI | Implementada | 27/33 tareas; despacho real a los 3 CLIs validado en producción (feature 002); pendientes las mediciones E2E (SC-004) |
-| 002 — Especificador de Agentes y README | Implementada | 9/11 tareas; 7 agentes del proyecto generados y aprobados; quedan 2 validaciones interactivas |
+| 001 — Orquestador Multi-CLI | Implementada | 27/33 tareas; despacho real a los 3 CLIs validado en producción (features 002/003); pendientes las mediciones E2E (SC-004) |
+| 002 — Especificador de Agentes y README | Implementada | 10/11 tareas; 7 agentes del proyecto generados y aprobados |
+| 003 — Soporte Genérico de CLIs y Multiplataforma | Implementada | 19/20 tareas; cualquier CLI registrable sin tocar código (validado con un 4to CLI stub); suite 76/76; pendiente la corrida de CI en los 3 SO |
 
 _Actualizado: 2026-07-18_
 <!-- speckit:estado:fin -->
@@ -243,6 +244,10 @@ Reemplaza/envuelve la fase implement: lee `tasks.md` con las asignaciones, despa
 
 La feature 002-agent-specifier agregó tres comandos slash: `speckit-agents` analiza el objetivo del proyecto contra una taxonomía de dominios y genera las definiciones de agentes necesarias en `.specify/agents/` (portables) y `.claude/agents/` (nativas de Claude), con confirmación previa; `speckit-readme` crea o actualiza el README con secciones gestionadas delimitadas (objetivo, alcance, estado) preservando el contenido manual; `speckit-constitution-plus` corre la fase constitution base y al terminar ofrece el especificador de agentes.
 
+### Configuración de CLIs (feature 003)
+
+El sistema ya no está limitado a claude/codex/kimi — cualquier CLI de IA con modo no-interactivo se puede registrar con el comando slash `speckit-clis` (registrar, editar, verificar, dar de baja), los CLIs conocidos vienen precargados en el catálogo versionado `.specify/clis-catalog.json` (plantillas, patrones de cuota y quirks por versión), y el inventario `.specify/models.json` ahora acepta claves de CLI dinámicas manteniendo compatibilidad con el formato anterior.
+
 ### Paso 7 — Probar el flujo completo
 
 Validar con una feature real: planificar con `/speckit-specify-auto` y dejar que el orquestador reparta la implementación entre Kimi, Codex y Claude, midiendo el ahorro de costo/uso.
@@ -266,7 +271,9 @@ specify init . --integration claude   # misma inicialización de siempre
 
 ## Requisitos
 
-- Windows 11 + PowerShell
+- Windows 11 con PowerShell 5.1 o 7
+- Linux y macOS con PowerShell 7 (`pwsh`) instalado (`apt install powershell` / `brew install powershell`)
+- Para desarrollo (correr los tests) se necesita Pester 5 o superior (`Install-Module Pester`)
 - [uv](https://docs.astral.sh/uv/) (gestor de paquetes de Python)
 - CLIs instalados: [Claude Code](https://claude.com/claude-code), Codex CLI, Kimi CLI
 

@@ -22,7 +22,7 @@ Línea etiquetada (tras el asignador):
 ```
 
 - `<nivel>` ∈ `baja` | `media` | `alta`
-- `<cli>` ∈ `claude` | `codex` | `kimi`
+- `<cli>` ∈ `claude` | `codex` | `kimi`; patrón de nombres kebab-case: minúscula inicial seguida de minúsculas, dígitos o guiones (`[a-z][a-z0-9-]*`)
 - `<modelo>` = id existente en `models.json.clis.<cli>.modelos[].id`
 - Las etiquetas nuevas van SIEMPRE después de las oficiales (`[P]`, `[US#]`) y antes
   de la descripción, separadas por espacios.
@@ -32,7 +32,7 @@ Línea etiquetada (tras el asignador):
 Detección de etiquetas en una línea de tarea:
 
 ```regex
-^\s*- \[[ xX]\] +(T\d{3,}) +(?:(\[P\]) +)?(?:(\[US\d+\]) +)?(?:\[C:(baja|media|alta)\] +)?(?:\[M:([a-z]+)/([A-Za-z0-9._-]+)\] +)?(.+)$
+^\s*- \[[ xX]\] +(T\d{3,}) +(?:(\[P\]) +)?(?:(\[US\d+\]) +)?(?:\[C:(baja|media|alta)\] +)?(?:\[M:([a-z][a-z0-9-]*)/([A-Za-z0-9._-]+)\] +)?(.+)$
 ```
 
 - Grupos: 1=id, 2=[P], 3=[US#], 4=complejidad, 5=cli, 6=modelo, 7=descripción.

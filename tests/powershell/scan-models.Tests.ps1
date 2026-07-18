@@ -1,41 +1,45 @@
-# Tests Pester 3.x para scan-models.ps1
-$here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Split-Path -Parent (Split-Path -Parent $here)
-. (Join-Path $repoRoot '.specify\scripts\powershell\scan-models.ps1')
+# Tests Pester 5 para scan-models.ps1
+BeforeAll {
+    $script:repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+    . (Join-Path $script:repoRoot '.specify\scripts\powershell\scan-models.ps1')
+}
 
 Describe 'Build-Inventory / Build-Asignacion' {
 
-    $detections = @{
-        claude = @{ instalado = $true;  version = '2.1.0' }
-        codex  = @{ instalado = $false; version = 'desconocido' }
-        kimi   = @{ instalado = $true;  version = '1.4.2' }
+    BeforeAll {
+        $catalog = Get-CliCatalog -RepoRoot $script:repoRoot
+        $detections = @{
+            claude = @{ instalado = $true;  version = '2.1.0' }
+            codex  = @{ instalado = $false; version = 'desconocido' }
+            kimi   = @{ instalado = $true;  version = '1.4.2' }
+        }
+        $auth = @{ claude = $true; codex = $false; kimi = 'desconocido' }
+        $clis = Build-Inventory -Detections $detections -AuthStatus $auth -Catalog $catalog
+        $asignacion = Build-Asignacion $clis
     }
-    $auth = @{ claude = $true; codex = $false; kimi = 'desconocido' }
-    $clis = Build-Inventory -Detections $detections -AuthStatus $auth
-    $asignacion = Build-Asignacion $clis
 
     It 'marca el CLI ausente como no instalado' {
-        $clis['codex'].instalado | Should Be $false
+        $clis['codex'].instalado | Should -Be $false
     }
 
     It 'excluye al CLI no instalado de todas las listas de asignacion' {
         $todas = @($asignacion['alta']) + @($asignacion['media']) + @($asignacion['baja'])
-        @($todas | Where-Object { $_ -like 'codex/*' }).Count | Should Be 0
+        @($todas | Where-Object { $_ -like 'codex/*' }).Count | Should -Be 0
     }
 
     It 'incluye a todos los CLIs instalados en al menos una lista (Constitucion IV)' {
         $todas = @($asignacion['alta']) + @($asignacion['media']) + @($asignacion['baja'])
-        @($todas | Where-Object { $_ -like 'claude/*' }).Count | Should BeGreaterThan 0
-        @($todas | Where-Object { $_ -like 'kimi/*' }).Count | Should BeGreaterThan 0
+        @($todas | Where-Object { $_ -like 'claude/*' }).Count | Should -BeGreaterThan 0
+        @($todas | Where-Object { $_ -like 'kimi/*' }).Count | Should -BeGreaterThan 0
     }
 
     It 'deja plan y cuota como desconocido (nunca inventa valores)' {
-        $clis['claude'].plan  | Should Be 'desconocido'
-        $clis['claude'].cuota | Should Be 'desconocido'
+        $clis['claude'].plan  | Should -Be 'desconocido'
+        $clis['claude'].cuota | Should -Be 'desconocido'
     }
 
     It 'ordena baja por costo ascendente (el mas barato primero)' {
-        $asignacion['baja'][0] | Should Match '(claude/haiku|kimi/kimi-for-coding-highspeed)'
+        $asignacion['baja'][0] | Should -Match '(claude/haiku|kimi/kimi-for-coding-highspeed)'
     }
 
     It 'con solo kimi instalado, alta arranca con su modelo mas capaz' {
@@ -43,10 +47,10 @@ Describe 'Build-Inventory / Build-Asignacion' {
             claude = @{ instalado = $false; version = 'desconocido' }
             codex  = @{ instalado = $false; version = 'desconocido' }
             kimi   = @{ instalado = $true;  version = '1.0' }
-        } -AuthStatus @{ claude = $false; codex = $false; kimi = $true }
+        } -AuthStatus @{ claude = $false; codex = $false; kimi = $true } -Catalog $catalog
         $a = Build-Asignacion $soloKimi
-        $a['alta'].Count | Should BeGreaterThan 0
-        $a['alta'][0] | Should Be 'kimi/k3'
+        $a['alta'].Count | Should -BeGreaterThan 0
+        $a['alta'][0] | Should -Be 'kimi/k3'
     }
 
     It 'con nivel alta vacio usa fallback de mejores disponibles' {
@@ -58,26 +62,41 @@ Describe 'Build-Inventory / Build-Asignacion' {
             }
         }
         $a = Build-Asignacion $custom
-        $a['alta'].Count | Should BeGreaterThan 0
-        $a['alta'][0] | Should Be 'mini/tiny'
+        $a['alta'].Count | Should -BeGreaterThan 0
+        $a['alta'][0] | Should -Be 'mini/tiny'
+    }
+
+    It 'un CLI con deshabilitado true no aparece en ninguna lista de Build-Asignacion' {
+        $deshab = Build-Inventory -Detections @{
+            claude = @{ instalado = $true; version = '2.1.0' }
+            kimi   = @{ instalado = $true; version = '1.4.2' }
+        } -AuthStatus @{ claude = $true; kimi = $true } -Catalog $catalog -Existing @{
+            clis = [ordered]@{ claude = [ordered]@{ deshabilitado = $true } }
+        }
+        $a = Build-Asignacion $deshab
+        $todas = @($a['alta']) + @($a['media']) + @($a['baja'])
+        @($todas | Where-Object { $_ -like 'claude/*' }).Count | Should -Be 0
+        @($todas | Where-Object { $_ -like 'kimi/*' }).Count | Should -BeGreaterThan 0
     }
 }
 
 Describe 'Merge-PreservingUserEdits' {
 
-    $proposed = [ordered]@{
-        clis = [ordered]@{
-            claude = [ordered]@{
-                plan = 'desconocido'
-                modelos = @([ordered]@{ id = 'opus'; capacidad = 9; costo = 3 })
+    BeforeAll {
+        $proposed = [ordered]@{
+            clis = [ordered]@{
+                claude = [ordered]@{
+                    plan = 'desconocido'
+                    modelos = @([ordered]@{ id = 'opus'; capacidad = 9; costo = 3 })
+                }
             }
         }
-    }
-    $prevScan = [ordered]@{
-        clis = [ordered]@{
-            claude = [ordered]@{
-                plan = 'desconocido'
-                modelos = @([ordered]@{ id = 'opus'; capacidad = 9; costo = 3 })
+        $prevScan = [ordered]@{
+            clis = [ordered]@{
+                claude = [ordered]@{
+                    plan = 'desconocido'
+                    modelos = @([ordered]@{ id = 'opus'; capacidad = 9; costo = 3 })
+                }
             }
         }
     }
@@ -92,7 +111,7 @@ Describe 'Merge-PreservingUserEdits' {
             }
         }
         $merged = Merge-PreservingUserEdits -Proposed $proposed -Existing $existing -PrevScan $prevScan
-        $merged.clis.claude.plan | Should Be 'Max 5x'
+        $merged.clis.claude.plan | Should -Be 'Max 5x'
     }
 
     It 'un valor no editado se actualiza con la propuesta nueva' {
@@ -113,7 +132,7 @@ Describe 'Merge-PreservingUserEdits' {
             }
         }
         $merged = Merge-PreservingUserEdits -Proposed $proposed2 -Existing $existing -PrevScan $prevScan
-        $merged.clis.claude.modelos[0].capacidad | Should Be 10
+        $merged.clis.claude.modelos[0].capacidad | Should -Be 10
     }
 
     It 'sin scan previo, todo el archivo existente pertenece al usuario' {
@@ -126,8 +145,8 @@ Describe 'Merge-PreservingUserEdits' {
             }
         }
         $merged = Merge-PreservingUserEdits -Proposed $proposed -Existing $existing -PrevScan $null
-        $merged.clis.claude.plan | Should Be 'Pro'
-        $merged.clis.claude.modelos[0].capacidad | Should Be 5
+        $merged.clis.claude.plan | Should -Be 'Pro'
+        $merged.clis.claude.modelos[0].capacidad | Should -Be 5
     }
 
     It 'con -Force la propuesta nueva pisa todo' {
@@ -135,7 +154,7 @@ Describe 'Merge-PreservingUserEdits' {
             clis = [ordered]@{ claude = [ordered]@{ plan = 'Pro'; modelos = @() } }
         }
         $merged = Merge-PreservingUserEdits -Proposed $proposed -Existing $existing -PrevScan $prevScan -Force
-        $merged.clis.claude.plan | Should Be 'desconocido'
+        $merged.clis.claude.plan | Should -Be 'desconocido'
     }
 }
 
@@ -144,29 +163,48 @@ Describe 'ConvertTo-Json2Space' {
     It 'produce JSON valido con indentacion de 2 espacios' {
         $obj = [ordered]@{ a = [ordered]@{ b = 1 } }
         $out = ConvertTo-Json2Space $obj
-        { $out | ConvertFrom-Json } | Should Not Throw
+        { $out | ConvertFrom-Json } | Should -Not -Throw
         ($out -split "`n" | Where-Object { $_ -match '^\s+"b"' } | Select-Object -First 1) |
-            Should Match '^    "b"'   # nivel 2 -> 4 espacios (2 por nivel)
+            Should -Match '^    "b"'   # nivel 2 -> 4 espacios (2 por nivel)
     }
 }
 
 Describe 'Salida integrada valida contra el contrato' {
 
-    It 'toda referencia de asignacion existe en clis.<cli>.modelos' {
+    BeforeAll {
+        $catalog = Get-CliCatalog -RepoRoot $script:repoRoot
+    }
+
+    It 'toda referencia de asignacion existe en clis.[cli].modelos' {
         $detections = @{
             claude = @{ instalado = $true;  version = 'x' }
             codex  = @{ instalado = $true;  version = 'x' }
             kimi   = @{ instalado = $true;  version = 'x' }
         }
         $auth = @{ claude = $true; codex = $true; kimi = $true }
-        $clis = Build-Inventory -Detections $detections -AuthStatus $auth
+        $clis = Build-Inventory -Detections $detections -AuthStatus $auth -Catalog $catalog
         $asignacion = Build-Asignacion $clis
         foreach ($nivel in @('alta','media','baja')) {
             foreach ($ref in $asignacion[$nivel]) {
                 $parts = $ref -split '/', 2
                 $ids = @($clis[$parts[0]].modelos | ForEach-Object { $_.id })
-                $ids -contains $parts[1] | Should Be $true
+                $ids -contains $parts[1] | Should -Be $true
             }
         }
+    }
+}
+
+Describe 'Compatibilidad v1 (FR-011)' {
+
+    It 'preserva plan Max 5x de un models.json formato viejo' {
+        $fixturePath = Join-Path $script:repoRoot 'tests\fixtures\models-v1.json'
+        $existing = ConvertTo-PlainValue (Get-Content $fixturePath -Raw -Encoding UTF8 | ConvertFrom-Json)
+
+        $proposed = ConvertTo-PlainValue $existing
+        $proposed.clis.claude.plan = 'desconocido'
+        $prevScan = ConvertTo-PlainValue $proposed
+
+        $merged = Merge-PreservingUserEdits -Proposed $proposed -Existing $existing -PrevScan $prevScan
+        $merged.clis.claude.plan | Should -Be 'Max 5x'
     }
 }

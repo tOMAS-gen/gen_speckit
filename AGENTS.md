@@ -53,3 +53,4 @@ Estas skills también son Markdown portable ejecutable desde cualquier CLI princ
 | speckit-agents | Analiza el objetivo del proyecto y genera las definiciones de agentes necesarias en .specify/agents/ (ver .claude/skills/speckit-agents/SKILL.md) |
 | speckit-readme | Crea o actualiza el README.md con secciones gestionadas delimitadas preservando el contenido manual (ver .claude/skills/speckit-readme/SKILL.md) |
 | speckit-constitution-plus | Ejecuta la fase constitution base y al terminar ofrece el especificador de agentes (ver .claude/skills/speckit-constitution-plus/SKILL.md) |
+| speckit-clis | Configura CLIs genéricos del inventario: registrar, editar, verificar y dar de baja (ver .claude/skills/speckit-clis/SKILL.md) |

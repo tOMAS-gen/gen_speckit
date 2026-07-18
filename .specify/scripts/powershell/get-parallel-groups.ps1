@@ -18,7 +18,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 # Regex del contrato task-labels.md (grupos: id, P, US, complejidad, cli, modelo, descripcion)
-$script:TaskLineRegex = '^\s*- \[( |x|X)\] +(T\d{3,}) +(?:(\[P\]) +)?(?:(\[US\d+\]) +)?(?:\[C:(baja|media|alta)\] +)?(?:\[M:([a-z]+)/([A-Za-z0-9._-]+)\] +)?(.+)$'
+$script:TaskLineRegex = '^\s*- \[( |x|X)\] +(T\d{3,}) +(?:(\[P\]) +)?(?:(\[US\d+\]) +)?(?:\[C:(baja|media|alta)\] +)?(?:\[M:([a-z][a-z0-9-]*)/([A-Za-z0-9._-]+)\] +)?(.+)$'
 
 function ConvertFrom-TaskLine {
     # Parsea una linea de tasks.md; devuelve $null si no es una linea de tarea.

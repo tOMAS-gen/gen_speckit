@@ -1,18 +1,17 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Detecta CLIs de IA instalados (claude/codex/kimi) y genera .specify/models.json
-  con el inventario y ranking de modelos por complejidad.
+  Detecta CLIs de IA y genera .specify/models.json con inventario y ranking.
 .DESCRIPTION
-  - Deteccion automatica: instalado, version, plantilla headless, autenticacion
-    (best-effort por archivos de credenciales; -ProbeAuth hace una invocacion real).
-  - Siembra capacidad/costo/contexto desde una tabla estatica corregible.
-  - Preserva ediciones manuales del usuario: compara models.json existente contra la
-    propuesta previa (.specify/models.scan.json); lo que difiere es del usuario y
-    prevalece salvo -Force.
-  - Salida UTF-8 sin BOM, indentacion 2 espacios (contrato models-schema).
+  GENERICO (feature 003): ningun nombre de CLI vive en este codigo. Los CLIs
+  conocidos y sus datos (plantillas, semillas, hints) salen del catalogo versionado
+  .specify/clis-catalog.json; los CLIs registrados por el usuario salen del propio
+  inventario. Resolucion de datos: inventario > catalogo > defaults genericos.
+  - Preserva ediciones manuales comparando contra .specify/models.scan.json.
+  - Respeta la marca `deshabilitado` (excluye del ranking sin borrar).
+  - Salida UTF-8 sin BOM, indentacion 2.
 .NOTES
-  Dot-source (`. .\scan-models.ps1`) para importar las funciones sin ejecutar (tests).
+  Dot-source para importar funciones sin ejecutar (tests).
 #>
 [CmdletBinding()]
 param(
@@ -25,66 +24,67 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-$script:CliNames = @('claude', 'codex', 'kimi')
+. (Join-Path (Split-Path -Parent $PSCommandPath) 'platform.ps1')
 
-function Get-DefaultHeadless {
-    param([string]$Cli)
-    switch ($Cli) {
-        'claude' { 'claude -p "{prompt}" --dangerously-skip-permissions --output-format json' }
-        # codex 0.144+: exec es no-interactivo por defecto (--ask-for-approval ya no existe).
-        # danger-full-access implementa la Clarificacion S2 (permisos totales dentro del
-        # repo, verificacion del principal como control); workspace-write monta solo
-        # lectura cuando el proyecto no es un repo git.
-        'codex'  { 'codex exec "{prompt}" --sandbox danger-full-access --skip-git-repo-check --json' }
-        # Kimi Code usa alias calificados (config.toml: default_model = "kimi-code/k3").
-        # kimi-code 0.27+: -p ya es no-interactivo y NO se combina con --yolo.
-        'kimi'   { 'kimi -p "{prompt}" --model kimi-code/{modelo} --output-format text' }
+function Get-DefaultQuotaPatterns {
+    # Respaldo final si ni inventario ni catalogo declaran patrones (FR-012).
+    @('rate limit', 'quota', '\b429\b', 'usage limit')
+}
+
+function Get-CliCatalog {
+    # Catalogo versionado. Ausente o corrupto NO es fatal: se avisa y se sigue con
+    # el inventario + defaults (contracts/clis-catalog inv. 4).
+    param([string]$RepoRoot)
+    $path = Join-Path $RepoRoot (Join-Path '.specify' 'clis-catalog.json')
+    if (-not (Test-Path $path)) {
+        Write-Warning "Catalogo de CLIs no encontrado ($path); se continua con el inventario y defaults genericos."
+        return [ordered]@{ version = 0; patrones_cuota_genericos = @(Get-DefaultQuotaPatterns); clis = [ordered]@{} }
+    }
+    try {
+        ConvertTo-PlainValue (Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json)
+    } catch {
+        Write-Warning "Catalogo de CLIs invalido ($($_.Exception.Message)); se continua con el inventario y defaults genericos."
+        [ordered]@{ version = 0; patrones_cuota_genericos = @(Get-DefaultQuotaPatterns); clis = [ordered]@{} }
     }
 }
 
-function Get-SeedModels {
-    # Tabla estatica de siembra (research R6), actualizada 2026-07 con los pickers
-    # reales de cada CLI. El usuario corrige a mano en models.json; el id es el alias
-    # que acepta el flag --model de cada CLI (kimi usa prefijo kimi-code/ en la
-    # plantilla headless).
-    param([string]$Cli)
-    switch ($Cli) {
-        'claude' {
-            @(
-                [ordered]@{ id = 'fable';  capacidad = 10; costo = 3; contexto_k = 'desconocido' },
-                # El alias 'opus' invoca Opus estandar (200K); la variante 1M es un alias aparte (opus[1m]).
-                [ordered]@{ id = 'opus';   capacidad = 9;  costo = 3; contexto_k = 200 },
-                [ordered]@{ id = 'sonnet'; capacidad = 7;  costo = 2; contexto_k = 200 },
-                [ordered]@{ id = 'haiku';  capacidad = 5;  costo = 1; contexto_k = 200 }
-            )
-        }
-        'codex' {
-            @(
-                [ordered]@{ id = 'gpt-5.6-sol';   capacidad = 9; costo = 3; contexto_k = 272 },
-                [ordered]@{ id = 'gpt-5.6-terra'; capacidad = 7; costo = 2; contexto_k = 272 },
-                [ordered]@{ id = 'gpt-5.6-luna';  capacidad = 5; costo = 1; contexto_k = 272 },
-                [ordered]@{ id = 'gpt-5.5';       capacidad = 7; costo = 2; contexto_k = 272 }
-            )
-        }
-        'kimi' {
-            @(
-                [ordered]@{ id = 'k3';                        capacidad = 8; costo = 2; contexto_k = 1024 },
-                [ordered]@{ id = 'kimi-for-coding';           capacidad = 7; costo = 1; contexto_k = 256 },
-                [ordered]@{ id = 'kimi-for-coding-highspeed'; capacidad = 6; costo = 1; contexto_k = 256 }
-            )
-        }
+function Get-CatalogCliValue {
+    # Resolucion inventario > catalogo > default para un campo de un CLI.
+    param($Existing, $Catalog, [string]$Cli, [string]$Key, $Default = $null)
+    if ($null -ne $Existing -and $Existing.Contains('clis') -and $Existing['clis'].Contains($Cli)) {
+        $entry = $Existing['clis'][$Cli]
+        if ($entry -is [System.Collections.IDictionary] -and $entry.Contains($Key)) { return $entry[$Key] }
     }
+    if ($null -ne $Catalog -and $Catalog.Contains('clis') -and $Catalog['clis'].Contains($Cli)) {
+        $entry = $Catalog['clis'][$Cli]
+        if ($entry -is [System.Collections.IDictionary] -and $entry.Contains($Key)) { return $entry[$Key] }
+    }
+    $Default
+}
+
+function Get-CliNames {
+    # Union ordenada: primero los del catalogo, despues los registrados del inventario.
+    param($Catalog, $Existing)
+    $names = New-Object System.Collections.ArrayList
+    if ($null -ne $Catalog -and $Catalog.Contains('clis')) {
+        foreach ($n in $Catalog['clis'].Keys) { [void]$names.Add($n) }
+    }
+    if ($null -ne $Existing -and $Existing.Contains('clis')) {
+        foreach ($n in $Existing['clis'].Keys) { if (-not $names.Contains($n)) { [void]$names.Add($n) } }
+    }
+    ,@($names.ToArray())
 }
 
 function Get-CliDetection {
-    # Sondeo local: instalado (Get-Command) y version (--version con tolerancia a fallos).
-    param([string]$Cli)
+    # Sondeo local generico: instalado (resolucion portable) y version (version_cmd).
+    param([string]$Name, [string]$VersionCmd = '--version', [string[]]$ExeHints = @())
     $result = [ordered]@{ instalado = $false; version = 'desconocido' }
-    $cmd = Get-Command $Cli -ErrorAction SilentlyContinue
-    if ($null -ne $cmd) {
+    $exe = Resolve-Executable -Name $Name -ExeHints $ExeHints
+    if ($null -ne $exe) {
         $result.instalado = $true
         try {
-            $v = (& $Cli --version 2>&1 | Select-Object -First 1 | Out-String).Trim()
+            $args = @($VersionCmd -split '\s+')
+            $v = (& $exe @args 2>&1 | Select-Object -First 1 | Out-String).Trim()
             if ($v) { $result.version = $v }
         } catch { }
     }
@@ -92,60 +92,80 @@ function Get-CliDetection {
 }
 
 function Get-AuthStatus {
-    # Best-effort sin gastar cuota: presencia de archivos de credenciales conocidos.
-    # Con -Probe se hace una invocacion trivial real (consume una llamada minima).
-    param([string]$Cli, [switch]$Probe)
-    $credentialHints = @{
-        'claude' = @("$env:USERPROFILE\.claude\.credentials.json", "$env:USERPROFILE\.claude.json")
-        'codex'  = @("$env:USERPROFILE\.codex\auth.json")
-        'kimi'   = @("$env:USERPROFILE\.kimi-code\credentials\kimi-code.json", "$env:USERPROFILE\.kimi\credentials.json")
+    # Best-effort por hints de credenciales del SO actual; -Probe hace una invocacion
+    # minima real (consume una llamada).
+    param([string]$Name, [string[]]$AuthHints = @(), [string]$Headless = '', [switch]$Probe)
+    foreach ($hint in $AuthHints) {
+        $expanded = Expand-PortablePath $hint
+        if (Test-Path $expanded) { return $true }
     }
-    foreach ($path in $credentialHints[$Cli]) {
-        if (Test-Path $path) { return $true }
-    }
-    if ($Probe) {
+    if ($Probe -and $Headless) {
         try {
-            # Para la sonda se quita la seleccion de modelo (usa el default del CLI).
-            $headless = (Get-DefaultHeadless $Cli) -replace '\s*--model\s+\S*\{modelo\}\S*', '' `
-                -replace '\{prompt\}', 'responde solo: ok'
-            $out = cmd /c "$headless 2>&1"
+            $cmd = $Headless -replace '\s*--model\s+\S*\{modelo\}\S*', '' -replace '\{prompt\}', 'responde solo: ok'
+            $null = cmd /c "$cmd 2>&1"
             if ($LASTEXITCODE -eq 0) { return $true } else { return $false }
         } catch { return $false }
     }
     'desconocido'
 }
 
+function Get-AuthHintsForOs {
+    param($AuthHints)
+    if ($null -eq $AuthHints) { return @() }
+    $os = Get-OsFamily
+    if ($AuthHints -is [System.Collections.IDictionary] -and $AuthHints.Contains($os)) {
+        return @($AuthHints[$os])
+    }
+    @()
+}
+
 function Build-Inventory {
-    # Construye la seccion clis a partir de detecciones (inyectables para tests).
+    # Construye la seccion clis. Datos por CLI: inventario existente > catalogo.
     param(
-        [hashtable]$Detections,   # cli -> @{instalado; version}
-        [hashtable]$AuthStatus    # cli -> $true|$false|'desconocido'
+        [hashtable]$Detections,   # nombre -> @{instalado; version}
+        [hashtable]$AuthStatus,   # nombre -> $true|$false|'desconocido'
+        $Catalog = $null,
+        $Existing = $null
     )
     $clis = [ordered]@{}
-    foreach ($cli in $script:CliNames) {
+    foreach ($cli in $Detections.Keys | Sort-Object) {
         $det = $Detections[$cli]
+        $headless = Get-CatalogCliValue $Existing $Catalog $cli 'headless' ''
+        $modelos = Get-CatalogCliValue $Existing $Catalog $cli 'modelos' $null
+        if ($null -eq $modelos) {
+            $modelos = Get-CatalogCliValue $null $Catalog $cli 'modelos_semilla' @()
+        }
+        $origen = 'registrado'
+        if ($null -ne $Catalog -and $Catalog.Contains('clis') -and $Catalog['clis'].Contains($cli)) { $origen = 'catalogo' }
         $entry = [ordered]@{
             instalado   = [bool]$det.instalado
             autenticado = $AuthStatus[$cli]
             version     = $det.version
-            headless    = Get-DefaultHeadless $cli
-            plan        = 'desconocido'
-            cuota       = 'desconocido'
-            modelos     = @(Get-SeedModels $cli)
+            headless    = $headless
+            origen      = $origen
+            plan        = (Get-CatalogCliValue $Existing $null $cli 'plan' 'desconocido')
+            cuota       = (Get-CatalogCliValue $Existing $null $cli 'cuota' 'desconocido')
+            modelos     = @($modelos)
         }
+        $deshabilitado = Get-CatalogCliValue $Existing $null $cli 'deshabilitado' $false
+        if ($deshabilitado) { $entry['deshabilitado'] = $true }
+        $patrones = Get-CatalogCliValue $Existing $Catalog $cli 'patrones_cuota' $null
+        if ($null -ne $patrones) { $entry['patrones_cuota'] = @($patrones) }
         $clis[$cli] = $entry
     }
     $clis
 }
 
 function Build-Asignacion {
-    # Listas ordenadas por nivel: capacidad suficiente -> menor costo -> mayor capacidad.
-    # Nunca excluye un CLI instalado (Constitucion IV). Nivel vacio -> mejores disponibles.
+    # Listas ordenadas por nivel. Nunca excluye un CLI instalado y habilitado
+    # (Constitucion IV). Nivel vacio -> mejores disponibles.
     param($Clis)
     $available = @()
     foreach ($cli in $Clis.Keys) {
-        if (-not $Clis[$cli].instalado) { continue }
-        foreach ($m in $Clis[$cli].modelos) {
+        $entry = $Clis[$cli]
+        if (-not $entry.instalado) { continue }
+        if ($entry.Contains('deshabilitado') -and $entry['deshabilitado']) { continue }
+        foreach ($m in $entry.modelos) {
             $available += [pscustomobject]@{
                 ref = "$cli/$($m.id)"; capacidad = $m.capacidad; costo = $m.costo
             }
@@ -160,7 +180,6 @@ function Build-Asignacion {
     foreach ($name in @('alta','media','baja')) {
         $list = $levels[$name]
         if ($list.Count -eq 0) {
-            # Fallback por diseno: sin candidatos del nivel, los mejores disponibles.
             $list = @($available | Sort-Object @{e='capacidad';Descending=$true}, costo)
         }
         $asignacion[$name] = @($list | ForEach-Object { $_.ref })
@@ -190,10 +209,9 @@ function ConvertTo-PlainValue {
 
 function Merge-PreservingUserEdits {
     <#
-      Regla (FR-004 / invariante 4): un valor del models.json existente que difiere de
-      la propuesta previa (models.scan.json) fue editado por el usuario y PREVALECE.
-      Sin propuesta previa, todo el existente se considera del usuario.
-      Con -Force, gana la propuesta nueva siempre.
+      Regla (FR-004): un valor del models.json existente que difiere de la propuesta
+      previa (models.scan.json) fue editado por el usuario y PREVALECE. Sin propuesta
+      previa, todo el existente es del usuario. Con -Force gana la propuesta nueva.
     #>
     param($Proposed, $Existing, $PrevScan, [switch]$Force)
     if ($Force -or $null -eq $Existing) { return $Proposed }
@@ -219,13 +237,9 @@ function Merge-Node {
         return $out
     }
     # Hojas y arrays: si el existente difiere de la propuesta previa -> edicion manual, prevalece.
-    # Sin scan previo el usuario es dueno de todo; editado a mano prevalece; sin editar entra lo nuevo.
     $exisJson = ConvertTo-Json -InputObject $Exis -Depth 10 -Compress
     $prevJson = if ($null -ne $Prev) { ConvertTo-Json -InputObject $Prev -Depth 10 -Compress } else { $null }
-    # Asignacion directa (no via expresion if): el pipeline de PS enumeraria un array
-    # de 1 elemento y lo reduciria a su elemento.
     if ($null -eq $prevJson -or $exisJson -ne $prevJson) { $winner = $Exis } else { $winner = $Prop }
-    # La coma preserva arrays: cada frontera de funcion de PS desenrolla una vez.
     if ($winner -is [System.Collections.IList] -and $winner -isnot [string]) { return ,$winner }
     return $winner
 }
@@ -237,8 +251,8 @@ function ConvertTo-JsonStringLiteral {
 }
 
 function ConvertTo-CanonicalJson {
-    # Serializador propio: JSON deterministico con indentacion 2 (el ConvertTo-Json de
-    # PS 5.1 usa un formato irregular que rompe el invariante 6 del contrato).
+    # Serializador propio: JSON deterministico con indentacion 2 (el ConvertTo-Json
+    # nativo usa un formato irregular que rompe el invariante del contrato).
     param($Value, [int]$Indent = 0)
     $pad = ' ' * $Indent
     $childIndent = $Indent + 2
@@ -265,15 +279,8 @@ function ConvertTo-CanonicalJson {
 }
 
 function ConvertTo-Json2Space {
-    # JSON canonico del proyecto: indentacion 2 espacios (contrato, invariante 6).
     param($Object)
     (ConvertTo-CanonicalJson $Object 0) + "`n"
-}
-
-function Write-Utf8NoBom {
-    param([string]$Path, [string]$Content)
-    $encoding = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($Path, $Content, $encoding)
 }
 
 function Invoke-ScanModels {
@@ -284,41 +291,49 @@ function Invoke-ScanModels {
         [switch]$Json
     )
     if (-not $RepoRoot) {
-        # scan-models.ps1 vive en <root>\.specify\scripts\powershell\ -> subir 3 niveles desde su carpeta.
+        # Este script vive en <root>\.specify\scripts\powershell\ -> subir 3 niveles.
         $scriptDir = Split-Path -Parent $PSCommandPath
         $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $scriptDir))
     }
-    $modelsPath = Join-Path $RepoRoot '.specify\models.json'
-    $scanPath   = Join-Path $RepoRoot '.specify\models.scan.json'
+    $modelsPath = Join-Path $RepoRoot (Join-Path '.specify' 'models.json')
+    $scanPath   = Join-Path $RepoRoot (Join-Path '.specify' 'models.scan.json')
 
-    $detections = @{}
-    $auth = @{}
-    foreach ($cli in $script:CliNames) {
-        $detections[$cli] = Get-CliDetection $cli
-        $auth[$cli] = if ($detections[$cli].instalado) { Get-AuthStatus $cli -Probe:$ProbeAuth } else { $false }
+    $catalog = Get-CliCatalog -RepoRoot $RepoRoot
+    $existing = $null
+    $prevScan = $null
+    if (Test-Path $modelsPath) {
+        try { $existing = ConvertTo-PlainValue (Get-Content $modelsPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch {
+            Write-Warning "models.json existente es invalido ($($_.Exception.Message)); se regenera desde cero."
+        }
+    }
+    if (Test-Path $scanPath) {
+        try { $prevScan = Get-Content $scanPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
     }
 
-    $clis = Build-Inventory -Detections $detections -AuthStatus $auth
+    $names = Get-CliNames -Catalog $catalog -Existing $existing
+    $detections = @{}
+    $auth = @{}
+    foreach ($cli in $names) {
+        $versionCmd = Get-CatalogCliValue $existing $catalog $cli 'version_cmd' '--version'
+        $exeHints = @(Get-CatalogCliValue $existing $catalog $cli 'exe_hints' @())
+        $detections[$cli] = Get-CliDetection -Name $cli -VersionCmd $versionCmd -ExeHints $exeHints
+        if ($detections[$cli].instalado) {
+            $hints = Get-AuthHintsForOs (Get-CatalogCliValue $existing $catalog $cli 'auth_hints' $null)
+            $headless = Get-CatalogCliValue $existing $catalog $cli 'headless' ''
+            $auth[$cli] = Get-AuthStatus -Name $cli -AuthHints $hints -Headless $headless -Probe:$ProbeAuth
+        } else {
+            $auth[$cli] = $false
+        }
+    }
+
+    $clis = Build-Inventory -Detections $detections -AuthStatus $auth -Catalog $catalog -Existing $existing
     $proposed = [ordered]@{
         clis       = $clis
         asignacion = Build-Asignacion $clis
     }
 
-    $existing = $null
-    $prevScan = $null
-    if (Test-Path $modelsPath) {
-        try { $existing = Get-Content $modelsPath -Raw | ConvertFrom-Json } catch {
-            Write-Warning "models.json existente es invalido ($($_.Exception.Message)); se regenera desde cero."
-        }
-    }
-    if (Test-Path $scanPath) {
-        try { $prevScan = Get-Content $scanPath -Raw | ConvertFrom-Json } catch { }
-    }
-
     $final = Merge-PreservingUserEdits -Proposed $proposed -Existing $existing -PrevScan $prevScan -Force:$Force
 
-    # La propuesta cruda del scan se persiste SIEMPRE: es la referencia para detectar
-    # ediciones manuales en la proxima ejecucion (invariante 4 del contrato).
     Write-Utf8NoBom -Path $scanPath   -Content (ConvertTo-Json2Space $proposed)
     Write-Utf8NoBom -Path $modelsPath -Content (ConvertTo-Json2Space $final)
 
@@ -328,7 +343,7 @@ function Invoke-ScanModels {
             SCAN_JSON   = $scanPath
             CLIS        = [ordered]@{}
         }
-        foreach ($cli in $script:CliNames) {
+        foreach ($cli in $names) {
             $summary.CLIS[$cli] = [ordered]@{
                 instalado = $detections[$cli].instalado
                 version   = $detections[$cli].version
@@ -338,9 +353,9 @@ function Invoke-ScanModels {
         $summary | ConvertTo-Json -Depth 5 -Compress
     } else {
         Write-Host "Inventario escrito en $modelsPath"
-        foreach ($cli in $script:CliNames) {
+        foreach ($cli in $names) {
             $st = if ($detections[$cli].instalado) { "instalado ($($detections[$cli].version))" } else { 'AUSENTE' }
-            Write-Host ("  {0,-7} {1}" -f $cli, $st)
+            Write-Host ("  {0,-12} {1}" -f $cli, $st)
         }
         Write-Host "Revisa y corrige a mano: plan, cuota, capacidad/costo. Tus ediciones prevalecen."
     }
@@ -348,6 +363,6 @@ function Invoke-ScanModels {
 
 if ($MyInvocation.InvocationName -ne '.') {
     Invoke-ScanModels -RepoRoot $RepoRoot -Force:$Force -ProbeAuth:$ProbeAuth -Json:$Json
-    # Los --version de CLIs externos pueden dejar LASTEXITCODE sucio; el scan fue exitoso.
+    # Los version_cmd de CLIs externos pueden dejar LASTEXITCODE sucio; el scan fue exitoso.
     exit 0
 }
