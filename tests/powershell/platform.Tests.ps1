@@ -25,10 +25,16 @@ Describe 'Expand-PortablePath' {
         $result | Should -Be $expected
     }
 
-    It 'expande %USERPROFILE%' {
-        $result = Expand-PortablePath '%USERPROFILE%\foo\bar'
-        $expected = [System.IO.Path]::Combine($HOME, 'foo', 'bar')
-        $result | Should -Be $expected
+    It 'expande variables de entorno estilo %VAR%' {
+        # Variable propia del test: %USERPROFILE% no existe en linux/macos.
+        $env:GEN_SPECKIT_TEST_DIR = $HOME
+        try {
+            $result = Expand-PortablePath '%GEN_SPECKIT_TEST_DIR%\foo\bar'
+            $expected = [System.IO.Path]::Combine($HOME, 'foo', 'bar')
+            $result | Should -Be $expected
+        } finally {
+            Remove-Item Env:GEN_SPECKIT_TEST_DIR -ErrorAction SilentlyContinue
+        }
     }
 
     It 'normaliza tanto / como \ al separador del SO' {
