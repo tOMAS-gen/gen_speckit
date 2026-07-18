@@ -29,7 +29,13 @@ jobs:
         run: uv build --wheel
 
       - name: Run Python test suite
-        run: uv run --no-project --with pytest python -m pytest tests/python/ -q
+        shell: bash
+        run: |
+          set -e
+          WHL=$(ls dist/*.whl | head -1)
+          # Instalar el wheel además de pytest: los tests que importan
+          # specify_cli.gen_multicli necesitan las deps del paquete (typer, etc.).
+          uv run --no-project --with "$WHL" --with pytest python -m pytest tests/python/ -q
 
       - name: Validate get_parallel_groups.py JSON output
         shell: bash
