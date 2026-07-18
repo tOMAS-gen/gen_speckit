@@ -269,8 +269,25 @@ El instalador corre el `specify init` oficial (si el proyecto no está inicializ
 después copia **solo el producto** según un manifiesto explícito: las 8 skills
 multi-CLI, los playbooks de `.specify/orchestrator/`, los 6 scripts, el catálogo de
 CLIs y los punteros de portabilidad. **Nada del desarrollo de este repo** (specs,
-constitución, agentes, tests, CI) llega a tu proyecto. Desde un clon local:
-`.\install.ps1 -Destino C:\mi-proyecto`.
+constitución, agentes, tests, CI) llega a tu proyecto.
+
+**Elegís tu agente principal, como en el original.** Las skills multi-CLI se instalan
+en el formato y ubicación del agente que elijas con `-Skills` (por defecto, el mismo
+de `-Integracion`):
+
+| Valor | Dónde quedan las skills |
+|---|---|
+| `claude` (default) | `.claude/skills/<nombre>/SKILL.md` |
+| `kimi` | `.kimi/skills/<nombre>/SKILL.md` (mismo formato SKILL.md) |
+| `codex` | `.codex/prompts/<nombre>.md` (prompt plano, sin frontmatter) |
+| `todos` | los tres a la vez |
+
+```powershell
+# ejemplos desde un clon local:
+.\install.ps1 -Destino C:\mi-proyecto                     # claude (default)
+.\install.ps1 -Destino C:\mi-proyecto -Skills kimi        # kimi como principal
+.\install.ps1 -Destino C:\mi-proyecto -Skills todos       # los tres agentes
+```
 
 - **Compatibilidad total**: todo lo que hace spec-kit sigue funcionando igual (mismas skills base, mismos comandos, misma estructura `.specify/`).
 - **Solo se agregan funciones**: los pipelines `/speckit-specify-auto` y `/speckit-specify-auto-eco`, el triage, `/speckit-models`, el asignador y el orquestador multi-CLI.

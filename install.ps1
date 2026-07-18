@@ -21,7 +21,10 @@
 [CmdletBinding()]
 param(
     [string]$Destino = (Get-Location).Path,
-    [string]$Integracion = 'claude',
+    [string]$Integracion = 'claude',  # se pasa al specify init oficial (skills base)
+    [string]$Skills = '',             # donde instalar las skills multi-CLI:
+                                      #   claude | codex | kimi | todos | lista separada por coma
+                                      #   vacio = igual que -Integracion
     [string]$Script = 'ps',
     [switch]$SinInit,     # saltear el specify init oficial (ya inicializado a mano)
     [string]$Fuente = ''  # clon local del repo; vacio = descargar de GitHub
@@ -98,11 +101,47 @@ function Copy-Item2 {
     [void]$copiados.Add($DestRel)
 }
 
-foreach ($s in $SkillsNuevas) { Copy-Item2 (Join-Path '.claude\skills' $s) }
+# Agentes destino de las skills multi-CLI (como el original: la persona elige).
+if ([string]::IsNullOrWhiteSpace($Skills)) { $Skills = $Integracion }
+if ($Skills -eq 'todos') { $agentes = @('claude', 'codex', 'kimi') }
+else { $agentes = @($Skills -split ',' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ }) }
+
+function Install-SkillPara {
+    param([string]$Agente, [string]$SkillName)
+    $srcSkill = Join-Path $src (Join-Path '.claude\skills' $SkillName)
+    if (-not (Test-Path $srcSkill)) { Write-Warning "skill no encontrada: $SkillName"; return }
+    switch ($Agente) {
+        'claude' { Copy-Item2 (Join-Path '.claude\skills' $SkillName) }
+        'kimi' {
+            # Kimi Code usa el mismo formato SKILL.md, en .kimi/skills/ del proyecto.
+            Copy-Item2 (Join-Path '.claude\skills' $SkillName) (Join-Path '.kimi\skills' $SkillName)
+        }
+        'codex' {
+            # Codex usa prompts .md planos en .codex/prompts/: se quita el frontmatter.
+            $body = Get-Content (Join-Path $srcSkill 'SKILL.md') -Raw -Encoding UTF8
+            $sinFrontmatter = $body -replace '(?s)^---.*?---\s*', ''
+            $to = Join-Path $Destino (Join-Path '.codex\prompts' "$SkillName.md")
+            $toDir = Split-Path -Parent $to
+            if (-not (Test-Path $toDir)) { $null = New-Item -ItemType Directory -Force -Path $toDir }
+            $contenido = "# /$SkillName`n`n" + $sinFrontmatter
+            [System.IO.File]::WriteAllText($to, $contenido, (New-Object System.Text.UTF8Encoding($false)))
+            [void]$copiados.Add((Join-Path '.codex\prompts' "$SkillName.md"))
+        }
+        default {
+            # Agente sin mapeo conocido: copia portable + instrucciones en AGENTS.md.
+            Copy-Item2 (Join-Path '.claude\skills' $SkillName) (Join-Path '.specify\skills-portables' $SkillName)
+        }
+    }
+}
+
+foreach ($agente in $agentes) {
+    Write-Host "  skills multi-CLI para: $agente"
+    foreach ($s in $SkillsNuevas) { Install-SkillPara -Agente $agente -SkillName $s }
+}
 Copy-Item2 '.specify\orchestrator'
 foreach ($f in $ScriptsNuevos) { Copy-Item2 (Join-Path '.specify\scripts\powershell' $f) }
 Copy-Item2 '.specify\clis-catalog.json'
-Copy-Item2 '.codex\prompts\speckit-orchestrate.md'
+if ($agentes -notcontains 'codex') { Copy-Item2 '.codex\prompts\speckit-orchestrate.md' }
 
 # AGENTS.md: nunca pisar el del proyecto destino.
 $agentsDest = Join-Path $Destino 'AGENTS.md'
