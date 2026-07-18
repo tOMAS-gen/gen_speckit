@@ -3,11 +3,13 @@
 <!-- speckit:objetivo:inicio -->
 ## Objetivo
 
-Extender el Spec Kit de GitHub con un orquestador multi-CLI (Claude Code, Codex y
-Kimi) donde el usuario solo escribe la idea: el sistema clasifica su complejidad
-(triage), elige el flujo y el modelo para cada fase y cada tarea, y despacha el
-trabajo al modelo más económico que alcance — reservando los modelos caros para las
-decisiones que lo justifican. Todo de forma estrictamente aditiva sobre spec-kit.
+Un **fork del [Spec Kit de GitHub](https://github.com/github/spec-kit)** con un
+orquestador multi-CLI (Claude Code, Codex y Kimi) integrado dentro del propio
+`specify-cli`: el usuario solo escribe la idea y el sistema clasifica su complejidad
+(triage), elige el flujo y el modelo para cada fase y cada tarea, y despacha el trabajo
+al modelo más económico que alcance — reservando los caros para las decisiones que lo
+justifican. Un único `specify init` instala base + producto, y corre en cualquier
+entorno con solo Python. Todo de forma estrictamente aditiva sobre spec-kit.
 
 _Actualizado: 2026-07-18_
 <!-- speckit:objetivo:fin -->
@@ -15,15 +17,16 @@ _Actualizado: 2026-07-18_
 <!-- speckit:alcance:inicio -->
 ## Alcance
 
-**Es**: skills y playbooks Markdown portables + scripts PowerShell sobre un repo
-spec-kit; inventario y ranking de modelos (`models.json`); pipelines de una sola
-llamada (IDEAL y ECO); asignación de tareas por complejidad; orquestación con
-despacho headless, paralelismo y fallback por cuota; especificador de agentes y
-README gestionado.
+**Es**: fork de spec-kit con las mejoras multi-CLI dentro de `specify-cli` (un solo
+`specify init`); skills y playbooks Markdown portables; scripts de soporte en **Python**
+(multiplataforma, sin PowerShell); inventario y ranking de modelos (`models.json`);
+pipelines de una sola llamada (IDEAL y ECO); asignación de tareas por complejidad;
+orquestación con despacho headless, paralelismo y fallback por cuota; especificador de
+agentes y README gestionado.
 
-**No es**: no modifica las skills base de spec-kit; no usa API keys (solo los CLIs
-con sus suscripciones); v1 es Windows 11 + PowerShell; sin soporte de otros CLIs
-fuera de claude/codex/kimi.
+**No es**: no modifica las skills base ni el formato de artefactos de spec-kit; no usa
+API keys (solo los CLIs con sus suscripciones). Los scripts PowerShell heredados quedan
+solo por transición.
 
 _Actualizado: 2026-07-18_
 <!-- speckit:alcance:fin -->
@@ -33,230 +36,28 @@ _Actualizado: 2026-07-18_
 
 | Feature | Fase | Avance |
 |---|---|---|
-| 001 — Orquestador Multi-CLI | Implementada | 27/33 tareas; despacho real a los 3 CLIs validado en producción (features 002/003); pendientes las mediciones E2E (SC-004) |
-| 002 — Especificador de Agentes y README | Implementada | 10/11 tareas; 7 agentes del proyecto generados y aprobados |
-| 003 — Soporte Genérico de CLIs y Multiplataforma | Implementada | 19/20 tareas; cualquier CLI registrable sin tocar código (validado con un 4to CLI stub); suite 76/76; pendiente la corrida de CI en los 3 SO |
+| 001 — Orquestador Multi-CLI | Implementada | Despacho real a los 3 CLIs validado en producción |
+| 002 — Especificador de Agentes y README | Implementada | 7 agentes del proyecto generados y aprobados |
+| 003 — Soporte Genérico de CLIs y Multiplataforma | Implementada | Cualquier CLI registrable sin tocar código |
+| 004 — Fork de specify-cli (init de un solo paso) | Implementada | 28/28; `specify init` entrega base + producto, validado con el CLI real; `install.ps1` deprecado |
+| 005 — Scripts de soporte en Python (multiplataforma) | Implementada | 20/20; orquestador corre con solo Python (sin `pwsh`); CI `validate` verde en Windows/Linux/macOS |
 
 _Actualizado: 2026-07-18_
 <!-- speckit:estado:fin -->
 
-Repositorio que **mejora el [Spec Kit de GitHub](https://github.com/github/spec-kit) existente** y se instala de la misma manera: obtenés todo el spec-kit original **más** un orquestador multi-CLI (**Claude, Codex y Kimi**) que analiza la complejidad de la idea y de cada tarea, y despacha el trabajo al modelo más conveniente para **reducir el costo y el uso** de cada implementación.
+> **Dos mundos que no se cruzan.** Este README separa **[Usar gen_speckit](#usar-gen_speckit-instalar-en-tu-proyecto)**
+> (instalar la herramienta en tu proyecto) de **[Desarrollo de gen_speckit](#desarrollo-de-gen_speckit-este-repo)**
+> (trabajar sobre este repo). Lo que se instala en un proyecto es **solo el producto**;
+> los artefactos y datos del desarrollo de la herramienta nunca viajan al proyecto destino.
 
-## Objetivo
+---
 
-**Simplificar el sistema spec-kit de GitHub con un sistema multi-CLI donde solo pongo la idea** — desde cualquiera de los CLIs — y el sistema se autocorrige para decidir todo lo demás:
+# Usar gen_speckit (instalar en tu proyecto)
 
-- **Quién planifica**: elige solo qué flujo usar (eco o ideal) y qué modelo ejecuta cada fase, según la complejidad de la idea.
-- **Qué tarea hace cada modelo**: clasifica cada tarea y la asigna al modelo adecuado.
-- **Aprovechar los modelos económicos y más disponibles** para el grueso del trabajo, y **dejar los más complejos/caros solo para las tareas más importantes**.
+## Instalación — un solo paso
 
-En concreto, el sistema:
-
-1. **Identifica la complejidad** de la idea (triage) y de cada tarea generada por spec-kit.
-2. **Elige el CLI y modelo adecuado** para cada fase y cada tarea (Claude Code, Codex o Kimi), según complejidad, desempeño del modelo, plan contratado, ventana de contexto y uso/cuota disponible.
-3. **Reduce el costo y el uso**: una sola llamada con la idea, mínima intervención del usuario, y cada token caro gastado solo donde hace la diferencia.
-
-### Arquitectura simétrica (principal / secundarios)
-
-El orquestador puede correr desde **cualquiera** de los tres CLIs:
-
-- El CLI que ejecuta el orquestador actúa como **principal**.
-- Los otros dos actúan como **secundarios**: reciben las acciones/tareas por invocación de línea de comandos.
-- Por eso el orquestador debe ser **portable**: no puede depender de features exclusivas de un CLI.
-
-## Configuración previa (obligatoria)
-
-Antes de usar la skill se debe especificar, para cada plataforma:
-
-| Dato | Descripción |
-|---|---|
-| **Plan contratado** | Qué plan/suscripción se usa en cada CLI (Claude, Codex, Kimi) |
-| **Modelos disponibles** | Qué modelos ofrece cada plan y su desempeño relativo |
-| **Ventana de contexto** | Tamaño de contexto de cada modelo (si se puede obtener) |
-| **Uso / cuota disponible** | Límite y consumo actual de cada plataforma (si se puede obtener) |
-
-Con estos datos el orquestador puede elegir adecuadamente sin exceder límites ni desperdiciar cuota de los modelos caros.
-
-## Flujo de trabajo
-
-```
-Preparación (una vez):
-  /speckit-models  → detecta CLIs instalados, modelos, planes y cuotas
-                     y genera el ranking en .specify/models.json
-
-Por cada idea / feature:
-  Triage (lo hace el modelo importante, antes de arrancar):
-    └─> Analiza la complejidad de la especificación (alcance, ambigüedad, riesgo):
-         · Idea simple   → flujo ECO, fases con modelos económicos
-         · Idea media    → flujo IDEAL, fases con modelos mixtos
-         · Idea compleja → flujo IDEAL, fases clave con el modelo importante
-        Además decide qué modelo ejecuta CADA FASE del pipeline
-        (no solo la implementación se reparte — las fases también).
-  Pipeline (specify → ... → tasks):
-    └─> En la fase tasks, un MODELO IMPORTANTE (el más capaz disponible):
-         1. Clasifica la complejidad de cada tarea [C:baja|media|alta]
-         2. Asigna qué modelo se hace cargo de cada tarea
-            (regla: nunca discriminar — todos los modelos disponibles
-             participan según su capacidad, costo y disponibilidad)
-  Orquestador (fase implement):
-    └─> 3. Lee tasks.md con las asignaciones
-        4. Despacha cada tarea a su CLI asignado ([P] en paralelo)
-        5. Si un modelo agota su cuota, escala al siguiente del ranking
-        6. El principal integra, verifica y marca [X]
-```
-
-### Triage de la especificación
-
-Al recibir la idea, el modelo importante evalúa su complejidad **antes de ejecutar nada**:
-
-| Complejidad de la idea | Flujo | Modelos por fase |
-|---|---|---|
-| Simple | ECO (4 fases) | Fases con modelos económicos; el importante solo asigna en tasks |
-| Media | IDEAL (7 fases) | Mixto: plan/analyze con modelo importante, el resto intermedios |
-| Compleja | IDEAL (7 fases) | Specify, plan y analyze con el modelo importante |
-
-- Si el flujo invocado no coincide con lo recomendado (ej. `/speckit-specify-auto` con una idea simple): sin `-bypass` pregunta si cambiar a eco; con `-bypass` cambia solo y lo informa en el reporte.
-- El triage lo hace el modelo importante: decidir mal el flujo es caro y el análisis en sí es corto.
-
-**El triage también se evalúa a sí mismo** — la autocorrección incluye al propio modelo que recibió la idea:
-
-- Idea escrita en un CLI **económico** (ej. Kimi) pero la idea es **compleja** → el modelo actual es inferior a lo necesario: **escala** la planificación a un modelo superior y él queda como secundario/despachador.
-- Idea escrita en un CLI **caro** (ej. Claude) pero la idea es **simple** → el modelo actual es superior a lo necesario: **degrada** el trabajo a los modelos económicos para no quemar cuota cara en algo trivial.
-
-Ningún punto de entrada es incorrecto: la idea se escribe en cualquier CLI y el sistema se reacomoda solo, hacia arriba o hacia abajo.
-
-### Principios de asignación
-
-- **Nunca discriminar un modelo**: el ranking no excluye a nadie; decide qué tareas le tocan a cada modelo. Todos los CLIs disponibles participan del reparto.
-- **Asignar es tarea de modelo importante**: clasificar y repartir lo hace el modelo más capaz (el principal) — equivocarse en el reparto es caro; ejecutar una tarea simple, no.
-- **El más barato que alcance**: cada tarea va al modelo más económico cuya capacidad y contexto alcanzan para resolverla bien.
-
-### Contratos de datos
-
-**Etiquetas en `tasks.md`** (las agrega el asignador; editables a mano antes de implementar):
-
-```
-- [ ] T012 [P] [US1] [C:baja]  [M:kimi/k2]     Crear modelo User en src/models/user.py
-- [ ] T019     [US2] [C:alta]  [M:claude/opus] Integrar pasarela de pagos en src/services/payments.py
-```
-
-- `[C:baja|media|alta]` — complejidad clasificada
-- `[M:cli/modelo]` — modelo que se hace cargo de la tarea
-- El formato oficial de spec-kit (checkbox, `T###`, `[P]`, `[US#]`, ruta) no se modifica
-
-**`.specify/models.json`** (lo genera `/speckit-models`; el usuario puede corregirlo):
-
-```json
-{
-  "clis": {
-    "claude": {
-      "instalado": true, "autenticado": true, "headless": "claude -p",
-      "plan": "declarado por el usuario", "cuota": "ok",
-      "modelos": [ { "id": "opus", "capacidad": 9, "costo": 3, "contexto_k": 200 } ]
-    },
-    "codex": { "...": "" }, "kimi": { "...": "" }
-  },
-  "asignacion": {
-    "alta":  ["claude/opus"],
-    "media": ["codex/gpt-5-codex", "claude/sonnet"],
-    "baja":  ["kimi/k2", "codex/gpt-5-mini"]
-  }
-}
-```
-
-- `capacidad` (1–10) y `costo` (1–3): valores comparables, propuestos por el escaneo y corregibles
-- `asignacion`: por cada complejidad, lista **ordenada** de candidatos — el primero es el preferido; si no tiene cuota o contexto, se escala al siguiente (fallback resuelto por diseño)
-- `headless`: comando exacto con el que el orquestador invoca a cada CLI secundario
-
-## Paso a paso del proyecto
-
-### Paso 1 — Instalar Spec Kit ✅
-
-```powershell
-uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
-specify version   # verificar instalación
-```
-
-### Paso 2 — Inicializar el proyecto ✅
-
-```powershell
-specify init . --integration claude --script ps
-```
-
-Esto creó `.specify/` (scripts, plantillas, constitución) y `.claude/skills/` con las 10 skills base de spec-kit: `constitution`, `specify`, `clarify`, `plan`, `tasks`, `checklist`, `analyze`, `implement`, `converge`, `taskstoissues`.
-
-### Paso 3 — Pipelines automatizados `/speckit-specify-auto` y `/speckit-specify-auto-eco`
-
-Con **una sola llamada** se ejecuta todo el circuito de spec-kit, en dos variantes:
-
-**`/speckit-specify-auto "idea"` — flujo ideal ✅** (creada)
-
-Ejecuta las 7 fases, incluidas las opcionales de calidad:
-
-```
-specify → clarify → plan → checklist → tasks → analyze → [gate] → implement
-```
-
-Para features medianas/grandes o con requisitos difusos: tres controles de calidad (clarify, checklist, analyze) antes de escribir código.
-
-**`/speckit-specify-auto-eco "idea"` — flujo simple ✅** (creada)
-
-Ejecuta solo el ciclo mínimo, sin las fases opcionales:
-
-```
-specify → plan → tasks → [gate] → implement
-```
-
-Para features chicas, ideas claras o prototipos: menos pasos, menos consumo.
-
-**Comportamiento común de ambas:**
-
-- Encadenan las fases automáticamente; **solo se frenan ante decisiones o dudas reales** (preguntas de clarificación, hallazgos críticos).
-- Flag **`-bypass`**: si no hay dudas pendientes, implementa directamente **sin esperar la orden del usuario** (salta el gate de confirmación previo a implement).
-- Flag `--sin-implementar`: se detiene tras la planificación (no ejecuta implement).
-- Retomables: detectan artefactos existentes y ofrecen continuar desde la fase faltante.
-
-### Paso 4 — Comando de descubrimiento `/speckit-models` ✅
-
-Skill + script (`scan-models.ps1`) que arma el inventario de recursos disponibles:
-
-- **Detección automática**: qué CLIs están instalados (claude/codex/kimi), versión, autenticación, modo headless disponible (`claude -p`, `codex exec`, etc.) y modelos que exponga cada uno.
-- **Declaración del usuario** (lo que no se puede detectar): plan contratado, cuotas/límites, ventana de contexto.
-- **Salida**: `.specify/models.json` con el ranking de modelos de mejor a peor por **capacidad según tipo de tarea, costo y disponibilidad**. El usuario puede corregir el ranking a mano.
-
-### Paso 5 — Asignador de modelos en la fase tasks ✅
-
-Paso extra al final de la fase tasks de los pipelines, **ejecutado por el modelo más capaz disponible** (el principal):
-
-- Clasifica la complejidad de cada tarea: alcance, contexto necesario, dependencias, riesgo, tipo → `[C:baja|media|alta]`.
-- Asigna qué modelo se hace cargo de cada tarea consultando `.specify/models.json`, sin excluir a ninguno.
-- Las etiquetas quedan inline en `tasks.md` (editables a mano antes de implementar).
-
-### Paso 6 — Crear la skill orquestadora ✅
-
-Reemplaza/envuelve la fase implement: lee `tasks.md` con las asignaciones, despacha cada tarea a su CLI por línea de comandos (las `[P]` en paralelo, respetando dependencias), escala al siguiente modelo del ranking si uno agota cuota, integra resultados y marca `[X]`. Portable: puede correr desde cualquiera de los tres CLIs como principal.
-
-**Implementación**: la lógica portable vive en `.specify/orchestrator/` (playbooks `triage.md`, `assign.md`, `orchestrate.md` + `report-template.md`); las skills por CLI son adaptadores finos (`.claude/skills/` para Claude, `AGENTS.md` + `.codex/prompts/` para Codex/Kimi). Scripts de soporte en `.specify/scripts/powershell/` (`scan-models.ps1`, `get-parallel-groups.ps1`, `invoke-secondary.ps1`, `update-quota.ps1`) con tests Pester en `tests/powershell/`.
-
-> **Nota**: `.specify/models.json` y `.specify/models.scan.json` contienen datos locales de tu máquina (planes, cuotas) — al versionar el proyecto con git, agregalos a `.gitignore`.
-
-### Skills de contexto de proyecto (feature 002)
-
-La feature 002-agent-specifier agregó tres comandos slash: `speckit-agents` analiza el objetivo del proyecto contra una taxonomía de dominios y genera las definiciones de agentes necesarias en `.specify/agents/` (portables) y `.claude/agents/` (nativas de Claude), con confirmación previa; `speckit-readme` crea o actualiza el README con secciones gestionadas delimitadas (objetivo, alcance, estado) preservando el contenido manual; `speckit-constitution-plus` corre la fase constitution base y al terminar ofrece el especificador de agentes.
-
-### Configuración de CLIs (feature 003)
-
-El sistema ya no está limitado a claude/codex/kimi — cualquier CLI de IA con modo no-interactivo se puede registrar con el comando slash `speckit-clis` (registrar, editar, verificar, dar de baja), los CLIs conocidos vienen precargados en el catálogo versionado `.specify/clis-catalog.json` (plantillas, patrones de cuota y quirks por versión), y el inventario `.specify/models.json` ahora acepta claves de CLI dinámicas manteniendo compatibilidad con el formato anterior.
-
-### Paso 7 — Probar el flujo completo
-
-Validar con una feature real: planificar con `/speckit-specify-auto` y dejar que el orquestador reparta la implementación entre Kimi, Codex y Claude, midiendo el ahorro de costo/uso.
-
-## Distribución
-
-Este repositorio **es un fork del spec-kit oficial** con las mejoras multi-CLI
-integradas dentro del propio `specify-cli`. Se instala y se usa **con el mismo gesto de
-siempre** — pero un único `specify init` deja base + producto multi-CLI, **todo de una**:
+gen_speckit se instala **con el mismo gesto del spec-kit oficial**, pero un único
+`specify init` deja base + producto multi-CLI, **todo de una**:
 
 ```powershell
 # 1) Instalar el spec-kit de gen (una sola vez por máquina; reemplaza al specify oficial):
@@ -267,14 +68,26 @@ specify version   # verificar
 specify init . --integration claude --script ps
 ```
 
-No hay segundo paso ni `install.ps1`: las 8 skills multi-CLI, los playbooks de
-`.specify/orchestrator/`, los 6 scripts, el catálogo de CLIs y los punteros de
-portabilidad vienen **bundleados dentro del CLI** y los deposita el propio `init`.
-**Nada del desarrollo de este repo** (specs, constitución de gen, agentes, tests, CI)
-llega a tu proyecto.
+No hay segundo paso ni `install.ps1`. Corre en **Windows / Linux / macOS con solo
+Python** (los scripts de soporte del orquestador son Python; no hace falta `pwsh`).
 
-**Elegís tu agente principal, como en el original.** Con `--skills` decidís a qué
-agente(s) van las skills multi-CLI (por defecto, el mismo de `--integration`):
+## Qué te instala (el producto, y solo el producto)
+
+`specify init` deposita, además de la base intacta de spec-kit:
+
+- las **8 skills multi-CLI** (`speckit-models`, `speckit-clis`, `speckit-agents`,
+  `speckit-readme`, `speckit-orchestrate`, `speckit-constitution-plus`,
+  `speckit-specify-auto`, `speckit-specify-auto-eco`);
+- los **playbooks del orquestador** en `.specify/orchestrator/` (triage, assign, orchestrate, report);
+- los **scripts de soporte en Python** en `.specify/scripts/python/`;
+- el **catálogo de CLIs** (`.specify/clis-catalog.json`);
+- el aporte a `AGENTS.md` (no destructivo) y las exclusiones de datos locales en `.gitignore`.
+
+> **Nada del desarrollo de este repo** (specs, constitución de gen, agentes, tests, CI,
+> ni tu `models.json` local) llega a tu proyecto. Ver
+> [Separación desarrollo ↔ producto](#separación-desarrollo--producto-instalado).
+
+**Elegís tu agente principal** con `--skills` (por defecto, el mismo de `--integration`):
 
 | Valor de `--skills` | Dónde quedan las skills |
 |---|---|
@@ -283,45 +96,141 @@ agente(s) van las skills multi-CLI (por defecto, el mismo de `--integration`):
 | `codex` | `.codex/prompts/<nombre>.md` (prompt plano, sin frontmatter) |
 | `todos` | los tres a la vez |
 
-```powershell
-specify init . --integration claude --script ps                  # claude (default)
-specify init . --integration claude --script ps --skills kimi     # skills para kimi
-specify init . --integration claude --script ps --skills todos     # los tres agentes
-```
-
-- **Compatibilidad total**: todo lo que hace spec-kit sigue funcionando igual (mismas skills base, mismos comandos, misma estructura `.specify/`, mismas opciones del `init`).
-- **Solo se agregan funciones**: los pipelines `/speckit-specify-auto` y `/speckit-specify-auto-eco`, el triage, `/speckit-models`, el asignador y el orquestador multi-CLI.
-- Quien conoce spec-kit no aprende nada nuevo; quien quiere las mejoras las obtiene con el mismo gesto de instalación.
-
-> **Nota**: `install.ps1` quedó **deprecado** — su función (copiar el producto sobre un
-> `specify init` oficial) ahora la hace el `init` del fork. Se conserva solo por
-> transición y será removido.
-
 ## Requisitos
 
-- **Cualquier entorno con Python ≥3.11** (Windows / Linux / macOS). Los scripts de
-  soporte del orquestador están en **Python** — ya **no** hace falta PowerShell/`pwsh`.
-- [uv](https://docs.astral.sh/uv/) (gestor de paquetes de Python)
-- CLIs instalados: [Claude Code](https://claude.com/claude-code), Codex CLI, Kimi CLI
-- Para correr los tests: `pytest` (`uv run --with pytest ...`). Los scripts PowerShell
-  heredados (`.specify/scripts/powershell/`) quedan solo por transición.
+- **Cualquier entorno con Python ≥3.11** (Windows / Linux / macOS) — sin PowerShell/`pwsh`.
+- [uv](https://docs.astral.sh/uv/) (gestor de paquetes de Python).
+- CLIs instalados: [Claude Code](https://claude.com/claude-code), Codex CLI, Kimi CLI.
 
-## Estructura del proyecto
+## Configuración previa (una vez por máquina)
+
+Antes de orquestar corré `/speckit-models`: detecta los CLIs instalados y arma
+`.specify/models.json` con el inventario y el ranking. Lo no detectable (plan contratado,
+cuotas, ventana de contexto) lo declarás vos y **tus correcciones a mano siempre
+prevalecen**. Este archivo tiene **datos locales de tu máquina** y está en `.gitignore` —
+no se versiona ni se distribuye.
+
+## Cómo se usa (el flujo)
 
 ```
-gen_speckit/
-├── .claude/
-│   └── skills/          # Skills base de spec-kit + models + auto/auto-eco + orchestrate
-├── .codex/
-│   └── prompts/         # Adaptadores para Codex como principal
-├── .specify/
-│   ├── memory/          # Constitución del proyecto
-│   ├── orchestrator/    # Playbooks portables (triage, assign, orchestrate, report)
-│   ├── scripts/         # Scripts PowerShell de soporte (+ scan/invoke/quota/groups)
-│   └── templates/       # Plantillas de spec, plan y tasks
-├── specs/               # Features especificadas (spec, plan, tasks, reportes)
-├── tests/
-│   └── powershell/      # Tests Pester de los scripts
-├── AGENTS.md            # Adaptador para Codex/Kimi como principal
+Preparación (una vez):
+  /speckit-models  → inventario + ranking en .specify/models.json
+
+Por cada idea / feature:
+  Triage (el modelo más capaz, antes de arrancar):
+    · Idea simple   → flujo ECO,  fases con modelos económicos
+    · Idea media    → flujo IDEAL, fases mixtas
+    · Idea compleja → flujo IDEAL, fases clave con el modelo importante
+  Pipeline (specify → ... → tasks):
+    En tasks, el modelo importante clasifica cada tarea [C:baja|media|alta]
+    y le asigna un modelo [M:cli/modelo] (nunca discrimina — todos participan).
+  Orquestador (implement):
+    Despacha cada tarea a su CLI ([P] en paralelo), escala al siguiente del
+    ranking si uno agota cuota, y el principal integra, verifica y marca [X].
+```
+
+- **Una sola llamada**: `/speckit-specify-auto "idea"` (7 fases, con controles de calidad)
+  o `/speckit-specify-auto-eco "idea"` (ciclo mínimo). Encadenan solo; frenan ante dudas
+  reales. Flags: `-bypass` (salta el gate si no hay dudas), `--sin-implementar` (para tras
+  planificar). Retomables.
+- **Arquitectura simétrica**: el orquestador corre desde cualquiera de los 3 CLIs como
+  **principal**; los otros dos son **secundarios** invocados por línea de comandos
+  (headless). Por eso la lógica es portable, sin depender de un CLI.
+- **Autocorrección del triage**: si la idea se escribe en un CLI económico pero es
+  compleja, **escala** la planificación; si es simple pero se escribió en el caro,
+  **degrada**. Ningún punto de entrada es incorrecto.
+
+### Contratos de datos
+
+**Etiquetas en `tasks.md`** (las agrega el asignador; editables a mano):
+
+```
+- [ ] T012 [P] [US1] [C:baja]  [M:kimi/k3]     Crear modelo User en src/models/user.py
+- [ ] T019     [US2] [C:alta]  [M:claude/opus] Integrar pasarela de pagos en src/services/payments.py
+```
+
+`[C:baja|media|alta]` (complejidad) y `[M:cli/modelo]` (modelo responsable) son
+**aditivas e inline**; el formato oficial de spec-kit (checkbox, `T###`, `[P]`, `[US#]`,
+ruta) no se toca.
+
+**`.specify/models.json`** (lo genera `/speckit-models`; corregible a mano): por cada CLI
+`instalado`/`autenticado`/`headless`/`plan`/`cuota`/`modelos[]` (con `capacidad` 1–10 y
+`costo` 1–3), y `asignacion` con listas ordenadas `alta`/`media`/`baja` (el primero es el
+preferido; si no tiene cuota o contexto, se escala al siguiente — fallback por diseño).
+
+---
+
+# Desarrollo de gen_speckit (este repo)
+
+## Separación desarrollo ↔ producto instalado
+
+El repo mantiene **dos cosas distintas que no se cruzan**:
+
+| | **Desarrollo de la herramienta** (este repo se usa a sí mismo) | **Producto que se instala** (lo que shippea `specify init`) |
+|---|---|---|
+| Vive en | `.specify/` propio, `.claude/skills/`, `specs/`, `AGENTS.md`, `tests/`, constitución | `src/specify_cli/gen_multicli/assets/` (fuente de verdad de lo shippeable) |
+| Datos locales | `.specify/models.json`, `.specify/models.scan.json`, `specs/**/orchestration-logs/` — **en `.gitignore`**, no se versionan ni se distribuyen | — |
+
+Reglas:
+
+1. **Fuente de verdad de lo shippeable** = `src/specify_cli/gen_multicli/assets/`. El
+   `init` deposita desde ahí. Si tocás una skill/script/playbook, actualizá esa copia.
+2. **El desarrollo no viaja al destino**: `specify init` instala solo el producto
+   (manifiesto de arriba); nunca specs, constitución de gen, agentes, tests ni CI.
+3. **Datos locales nunca se versionan ni se shippean**: `models.json` y compañía viven
+   solo en tu máquina.
+
+> Nota: hoy el producto vive también como copia de trabajo del propio repo (`.specify/`,
+> `.claude/skills/`) para que gen_speckit se dogfoodee. Mantener esas copias en sync con
+> `assets/` es responsabilidad del desarrollo (ver issues/roadmap para una única fuente).
+
+## Estructura del repo
+
+```
+gen_speckit/                    # el repo ES el fork instalable (paquete Python)
+├── pyproject.toml              # paquete specify-cli, entry-point `specify`, hatchling
+├── src/specify_cli/            # fork de spec-kit vendorizado (upstream) + capa propia
+│   └── gen_multicli/           #   capa gen: install_product + assets/ (lo shippeable)
+│       └── assets/             #     skills-multicli, orchestrator, scripts-python,
+│                               #     scripts-powershell (heredado), clis-catalog.json
+├── templates/ scripts/ extensions/ workflows/ presets/   # core_pack de upstream (bundled)
+├── .specify/                   # runtime de DESARROLLO (dogfooding)
+│   ├── memory/                 #   constitución del proyecto
+│   ├── orchestrator/           #   playbooks portables (triage, assign, orchestrate, report)
+│   ├── scripts/python/         #   scripts de soporte en Python (via por defecto)
+│   └── scripts/powershell/     #   scripts heredados (transición)
+├── .claude/skills/  .codex/prompts/   # adaptadores por CLI (dev)
+├── specs/                      # features especificadas (spec, plan, tasks, reportes)
+├── tests/python/               # suite pytest (scripts + entrega del producto)
+├── .github/workflows/          # CI: gen-validate (fork + Python en 3 SO)
+├── UPSTREAM.md                 # versión pineada del upstream + procedimiento de sync
+├── AGENTS.md                   # adaptador para Codex/Kimi como principal
 └── README.md
 ```
+
+## Construir y probar
+
+```bash
+uv build --wheel                                              # construye el paquete
+uv run --no-project --with dist/*.whl --with pytest \
+  python -m pytest tests/python/ -q                           # suite de tests
+```
+
+El CI (`.github/workflows/gen-validate.yml`) corre build + pytest + un `specify init` de
+humo y valida los scripts Python **sin PowerShell** en Windows / Linux / macOS.
+
+## Relación con el upstream
+
+Este repo es un fork de `github/spec-kit@v0.13.0`. `UPSTREAM.md` documenta la versión
+pineada, el **diff mínimo sobre upstream** (solo `_version.py` e `init.py`) y el
+procedimiento para incorporar actualizaciones sin rehacer la capa multi-CLI.
+
+## Skills de contexto de proyecto
+
+- `speckit-agents`: analiza el objetivo del proyecto contra una taxonomía de dominios y
+  genera las definiciones de agentes en `.specify/agents/` (portables) y `.claude/agents/`.
+- `speckit-readme`: crea/actualiza este README con secciones gestionadas delimitadas
+  (objetivo, alcance, estado) preservando el contenido manual.
+- `speckit-constitution-plus`: corre la fase constitution y ofrece el especificador de agentes.
+- `speckit-clis`: registra/edita/verifica/da de baja cualquier CLI en `models.json`
+  (catálogo versionado en `.specify/clis-catalog.json`).
