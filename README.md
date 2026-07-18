@@ -19,14 +19,13 @@ _Actualizado: 2026-07-18_
 
 **Es**: fork de spec-kit con las mejoras multi-CLI dentro de `specify-cli` (un solo
 `specify init`); skills y playbooks Markdown portables; scripts de soporte en **Python**
-(multiplataforma, sin PowerShell); inventario y ranking de modelos (`models.json`);
+(multiplataforma); inventario y ranking de modelos (`models.json`);
 pipelines de una sola llamada (IDEAL y ECO); asignación de tareas por complejidad;
 orquestación con despacho headless, paralelismo y fallback por cuota; especificador de
 agentes y README gestionado.
 
 **No es**: no modifica las skills base ni el formato de artefactos de spec-kit; no usa
-API keys (solo los CLIs con sus suscripciones). Los scripts PowerShell heredados quedan
-solo por transición.
+API keys (solo los CLIs con sus suscripciones).
 
 _Actualizado: 2026-07-18_
 <!-- speckit:alcance:fin -->
@@ -40,7 +39,7 @@ _Actualizado: 2026-07-18_
 | 002 — Especificador de Agentes y README | Implementada | 7 agentes del proyecto generados y aprobados |
 | 003 — Soporte Genérico de CLIs y Multiplataforma | Implementada | Cualquier CLI registrable sin tocar código |
 | 004 — Fork de specify-cli (init de un solo paso) | Implementada | 28/28; `specify init` entrega base + producto, validado con el CLI real; `install.ps1` deprecado |
-| 005 — Scripts de soporte en Python (multiplataforma) | Implementada | 20/20; orquestador corre con solo Python (sin `pwsh`); CI `validate` verde en Windows/Linux/macOS |
+| 005 — Scripts de soporte en Python (multiplataforma) | Implementada | 20/20; orquestador corre con solo Python; CI `validate` verde en Windows/Linux/macOS |
 
 _Actualizado: 2026-07-18_
 <!-- speckit:estado:fin -->
@@ -59,7 +58,7 @@ _Actualizado: 2026-07-18_
 gen_speckit se instala **con el mismo gesto del spec-kit oficial**, pero un único
 `specify init` deja base + producto multi-CLI, **todo de una**:
 
-```powershell
+```bash
 # 1) Instalar el spec-kit de gen (una sola vez por máquina; reemplaza al specify oficial):
 uv tool install specify-cli --force --from git+https://github.com/tOMAS-gen/gen_speckit.git
 specify version   # verificar
@@ -69,7 +68,7 @@ specify init . --integration claude --script ps
 ```
 
 No hay segundo paso ni `install.ps1`. Corre en **Windows / Linux / macOS con solo
-Python** (los scripts de soporte del orquestador son Python; no hace falta `pwsh`).
+Python**.
 
 ## Qué te instala (el producto, y solo el producto)
 
@@ -98,7 +97,7 @@ Python** (los scripts de soporte del orquestador son Python; no hace falta `pwsh
 
 ## Requisitos
 
-- **Cualquier entorno con Python ≥3.11** (Windows / Linux / macOS) — sin PowerShell/`pwsh`.
+- **Cualquier entorno con Python ≥3.11** (Windows / Linux / macOS).
 - [uv](https://docs.astral.sh/uv/) (gestor de paquetes de Python).
 - CLIs instalados: [Claude Code](https://claude.com/claude-code), Codex CLI, Kimi CLI.
 
@@ -192,13 +191,12 @@ gen_speckit/                    # el repo ES el fork instalable (paquete Python)
 ├── src/specify_cli/            # fork de spec-kit vendorizado (upstream) + capa propia
 │   └── gen_multicli/           #   capa gen: install_product + assets/ (lo shippeable)
 │       └── assets/             #     skills-multicli, orchestrator, scripts-python,
-│                               #     scripts-powershell (heredado), clis-catalog.json
+│                               #     clis-catalog.json
 ├── templates/ scripts/ extensions/ workflows/ presets/   # core_pack de upstream (bundled)
 ├── .specify/                   # runtime de DESARROLLO (dogfooding)
 │   ├── memory/                 #   constitución del proyecto
 │   ├── orchestrator/           #   playbooks portables (triage, assign, orchestrate, report)
-│   ├── scripts/python/         #   scripts de soporte en Python (via por defecto)
-│   └── scripts/powershell/     #   scripts heredados (transición)
+│   └── scripts/python/         #   scripts de soporte del orquestador (Python)
 ├── .claude/skills/  .codex/prompts/   # adaptadores por CLI (dev)
 ├── specs/                      # features especificadas (spec, plan, tasks, reportes)
 ├── tests/python/               # suite pytest (scripts + entrega del producto)
@@ -217,7 +215,7 @@ uv run --no-project --with dist/*.whl --with pytest \
 ```
 
 El CI (`.github/workflows/gen-validate.yml`) corre build + pytest + un `specify init` de
-humo y valida los scripts Python **sin PowerShell** en Windows / Linux / macOS.
+humo y valida los scripts en Windows / Linux / macOS.
 
 ## Relación con el upstream
 
