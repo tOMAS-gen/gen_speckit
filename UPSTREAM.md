@@ -35,11 +35,12 @@ aíslan así:
 
 - `src/specify_cli/_version.py` — `GITHUB_API_LATEST` y `_GITHUB_SOURCE_URL` apuntan al
   fork `tOMAS-gen/gen_speckit` (2 líneas).
-- `src/specify_cli/commands/init.py` — 4 cambios aditivos:
+- `src/specify_cli/commands/init.py` — 5 cambios aditivos:
   - helper `_resolve_skills_agents` nuevo;
   - opción `--skills` nueva en la firma de `init`;
   - paso de tracker `"multicli"` registrado en el loop de `tracker.add`;
-  - bloque que llama `install_product` tras `ensure_constitution_from_template`.
+  - bloque que llama `install_product` tras `ensure_constitution_from_template`;
+  - panel "gen_speckit — Multi-CLI" al final del output del `init` (camino recomendado).
 
 Todos los archivos bajo `src/specify_cli/gen_multicli/` y los tests en `tests/python/`
 son NUEVOS; no tocan archivos de upstream.

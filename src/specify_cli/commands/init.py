@@ -874,3 +874,26 @@ def register(app: typer.Typer) -> None:
         )
         console.print()
         console.print(enhancements_panel)
+
+        # gen_speckit: el producto multi-CLI también se instaló — mostrar SU camino,
+        # que reemplaza el paso a paso base con una sola llamada orquestada.
+        multicli_lines = [
+            "El orquestador multi-CLI ya está instalado. El camino recomendado:",
+            "",
+            f"1. [cyan]{_display_cmd('models')}[/] - Detectar CLIs/modelos y armar el ranking (una vez por máquina)",
+            f"2. [cyan]{_display_cmd('specify-auto')}[/] [green]\"tu idea\"[/green] - TODO el circuito con una sola llamada:",
+            "   triage → specify → clarify → plan → checklist → tasks (+asignación) → analyze → implement orquestado",
+            f"   [bright_black](o [/bright_black][cyan]{_display_cmd('specify-auto-eco')}[/][bright_black] para ideas simples: ciclo mínimo)[/bright_black]",
+            "",
+            f"○ [cyan]{_display_cmd('clis')}[/] [bright_black]- registrar/verificar cualquier CLI del inventario[/bright_black]",
+            f"○ [cyan]{_display_cmd('orchestrate')}[/] [bright_black]- fase implement multi-CLI suelta (tasks.md ya etiquetado)[/bright_black]",
+            f"○ [cyan]{_display_cmd('agents')}[/] / [cyan]{_display_cmd('readme')}[/] / [cyan]{_display_cmd('constitution-plus')}[/] [bright_black]- agentes del proyecto, README gestionado, constitution+[/bright_black]",
+        ]
+        multicli_panel = Panel(
+            "\n".join(multicli_lines),
+            title="gen_speckit — Multi-CLI",
+            border_style="magenta",
+            padding=(1, 2),
+        )
+        console.print()
+        console.print(multicli_panel)
