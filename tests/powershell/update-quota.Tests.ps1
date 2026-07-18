@@ -65,8 +65,11 @@ Describe 'Update-Quota (escritura acotada, FR-018)' {
         Update-Quota -ModelsPath $path -Cli 'kimi' -Estado 'agotada' -Now $now | Out-Null
         $d = Get-Content $path -Raw | ConvertFrom-Json
         $d.clis.kimi.cuota | Should -Be 'agotada'
-        $d.clis.kimi.cuota_desde | Should -Match '^2026-07-18T10:00:00'
-        $d.clis.kimi.cuota_reset | Should -Match '^2026-07-18T15:00:00'
+        # Sobre el JSON crudo: pwsh 7 convierte strings de fecha a [datetime] al
+        # parsear y el -Match compararia contra la forma culturizada (quirk real de CI).
+        $raw = Get-Content $path -Raw
+        $raw | Should -Match '"cuota_desde": "2026-07-18T10:00:00'
+        $raw | Should -Match '"cuota_reset": "2026-07-18T15:00:00'
     }
 
     It 'NO toca ningun otro campo del inventario' {
