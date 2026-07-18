@@ -1,0 +1,14 @@
+# Datos locales del usuario (planes, cuotas, rutas de esta maquina) - no versionar
+.specify/models.json
+.specify/models.scan.json
+
+# Evidencia de corridas de orquestacion (logs con rutas locales y salidas de CLIs)
+specs/**/orchestration-logs/
+
+# Configuracion local de CLIs
+.claude/settings.local.json
+
+# Sistema
+Thumbs.db
+.DS_Store
+*.tmp
