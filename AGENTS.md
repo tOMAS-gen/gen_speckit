@@ -5,6 +5,8 @@ multi-CLI**. Cualquier CLI de IA (Claude Code, Codex, Kimi) puede actuar como
 **principal** del orquestador: la lógica es portable y vive en playbooks Markdown
 neutrales — este archivo es solo el adaptador de entrada.
 
+En este fork de gen, el producto se instala con `specify init` (no `install.ps1`).
+
 ## Comandos del orquestador multi-CLI
 
 Cuando el usuario pida alguna de estas acciones, leé COMPLETO el playbook indicado y

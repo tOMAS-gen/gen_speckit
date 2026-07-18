@@ -1,6 +1,17 @@
 <!--
-Sync Impact Report
+Sync Impact Report (v1.1.0 — 2026-07-18)
 ==================
+Version change: 1.0.0 → 1.1.0 (MINOR: restricción técnica materialmente modificada).
+Motivo: el proyecto pasó a ser un fork del spec-kit oficial (CLI en Python). La sección
+"Contratos de Datos y Restricciones Técnicas" cambia la plataforma objetivo y el lenguaje
+de los scripts de soporte: de "Windows 11 + PowerShell" a "cualquier entorno + Python",
+sin dependencia de PowerShell/pwsh. Los seis principios quedan intactos.
+Plantillas revisadas: plan-template.md (Constitution Check genérico, sin cambios) ✅ ·
+spec-template.md (sin secciones nuevas) ✅ · tasks-template.md (sin cambios de formato) ✅.
+Follow-up: portar los scripts `.specify/scripts/powershell/` a Python (feature de
+migración; los scripts heredados se conservan durante la transición).
+
+---- Sync Impact Report inicial (v1.0.0) ----
 Version change: (template, sin versión) → 1.0.0
 Ratificación inicial: se reemplazan todos los placeholders del template por los
 principios derivados de README.md.
@@ -121,9 +132,14 @@ innecesaria o trabajo rehecho erosiona ese contrato y quema cuota.
 - Configuración previa obligatoria: antes de orquestar DEBE existir `models.json` con
   plan, modelos, contexto y cuota por plataforma (lo detectable, detectado; lo no
   detectable, declarado o marcado como desconocido).
-- Plataforma objetivo: Windows 11 + PowerShell; los scripts de soporte se escriben en
-  PowerShell (`.specify/scripts/`). Dependencias: `uv`, y los CLIs Claude Code, Codex
-  y Kimi instalados.
+- Plataforma objetivo: cualquier entorno (Windows / Linux / macOS). Como el proyecto es
+  un **fork del spec-kit oficial** (CLI en Python), los scripts de soporte del orquestador
+  se escriben en **Python**, alineados con el lenguaje del CLI forkeado, de modo que el
+  producto corra en cualquier plataforma con solo Python instalado, **sin dependencia de
+  PowerShell/`pwsh`**. Dependencias: `uv` (Python ≥3.11) y los CLIs de IA instalados
+  (Claude Code, Codex, Kimi u otros registrados). Los scripts PowerShell heredados
+  (`.specify/scripts/powershell/`) se conservan durante la transición pero se migran a
+  Python; ningún componente nuevo del orquestador DEBE depender de PowerShell.
 
 ## Flujo de Trabajo y Puertas de Calidad
 
@@ -154,4 +170,4 @@ innecesaria o trabajo rehecho erosiona ese contrato y quema cuota.
   revisión de artefactos (analyze) se verifica que las asignaciones de modelos respeten
   los Principios III, IV y V.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-17 | **Last Amended**: 2026-07-17
+**Version**: 1.1.0 | **Ratified**: 2026-07-17 | **Last Amended**: 2026-07-18
