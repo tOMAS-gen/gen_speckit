@@ -103,7 +103,187 @@ def get_auth_status(name, auth_hints=None, headless="", probe=False):
     return "desconocido"
 
 
-def build_inventory(detections, auth, catalog, existing):
+# --------------------------------------------------------------------------- #
+# Descubrimiento real de modelos por CLI (feature 006).
+# Cadena: modelos_cmd (si no consume o aprobado) -> config_hints -> semillas.
+# Nunca inventa: todo modelo queda con `origen` in {detectado-local, semilla,
+# oficial-sin-confirmar}. Parseo tolerante: cualquier eslabón que falle se salta.
+# --------------------------------------------------------------------------- #
+
+_MODEL_ID_RE = None  # compilado perezoso
+
+
+def _plausible_model_id(value):
+    """Filtra strings que parecen ids de modelo (evita ruido de los configs).
+
+    Regla anti-ruido: además del shape, el id debe contener un dígito o un guion
+    (todos los ids reales los tienen: k3, gpt-5.6-sol, claude-opus-4-8,
+    kimi-for-coding); campos como 'lastusedat'/'usagecount' quedan afuera.
+    """
+    global _MODEL_ID_RE
+    import re as _re
+    if _MODEL_ID_RE is None:
+        _MODEL_ID_RE = _re.compile(r"^[a-z0-9][a-z0-9._/\-\[\]]{1,48}$")
+    if not (isinstance(value, str) and _MODEL_ID_RE.match(value.strip().lower())):
+        return False
+    v = value.strip().lower()
+    return any(ch.isdigit() for ch in v) or "-" in v
+
+
+def _normalize_model_id(value):
+    """'kimi-code/k3' -> 'k3'; 'claude-fable-5[1m]' -> 'claude-fable-5'."""
+    v = value.strip().lower()
+    if "/" in v:
+        v = v.rsplit("/", 1)[-1]
+    if "[" in v:
+        v = v.split("[", 1)[0]
+    return v
+
+
+def _efforts_from_entry(entry):
+    """Si la entrada del modelo declara niveles de esfuerzo, extraerlos."""
+    if not isinstance(entry, dict):
+        return None
+    for k, v in entry.items():
+        if isinstance(k, str) and "effort" in k.lower():
+            if isinstance(v, list) and all(isinstance(x, str) for x in v):
+                return list(v)
+            if isinstance(v, str):
+                return [v]
+    return None
+
+
+def _extract_models(node, found=None):
+    """Recorre una estructura parseada (TOML/JSON) juntando modelos: {id: {esfuerzos?}}.
+
+    Heurística genérica (sin nombres de CLI): bajo una clave cuyo nombre contiene
+    'model' y cuyo valor es un dict, las claves INMEDIATAS plausibles son ids de
+    modelo (un solo nivel — las claves internas son campos, no modelos). Si la
+    entrada del modelo declara esfuerzos (clave con 'effort'), se capturan.
+    """
+    if found is None:
+        found = {}
+    if isinstance(node, dict):
+        for k, v in node.items():
+            k_is_modelish = isinstance(k, str) and "model" in k.lower()
+            if k_is_modelish and isinstance(v, dict):
+                for mk, mv in v.items():
+                    if _plausible_model_id(str(mk)):
+                        mid = _normalize_model_id(str(mk))
+                        meta = found.setdefault(mid, {})
+                        efforts = _efforts_from_entry(mv)
+                        if efforts:
+                            meta["esfuerzos"] = efforts
+            elif k_is_modelish and isinstance(v, str) and _plausible_model_id(v):
+                found.setdefault(_normalize_model_id(v), {})
+            else:
+                _extract_models(v, found)
+    elif isinstance(node, list):
+        for item in node:
+            _extract_models(item, found)
+    return found
+
+
+def _load_config_file(path):
+    """Parsea un config local (TOML o JSON). Devuelve None si no se puede (tolerante)."""
+    p = Path(path)
+    if not p.is_file():
+        return None
+    try:
+        raw = p.read_bytes()
+        if p.suffix.lower() == ".toml":
+            import tomllib
+            return tomllib.loads(raw.decode("utf-8", errors="replace"))
+        return json.loads(raw.decode("utf-8-sig", errors="replace"))
+    except Exception:
+        return None
+
+
+def _get_config_hints_for_os(existing, catalog, cli):
+    hints = get_catalog_cli_value(existing, catalog, cli, "config_hints", None)
+    if not isinstance(hints, dict):
+        return []
+    val = hints.get(_platform.os_family())
+    if val is None:
+        return []
+    return val if isinstance(val, list) else [val]
+
+
+def detect_models(cli, existing, catalog, probe=False):
+    """Devuelve dict {id: {esfuerzos?}} de modelos detectados localmente para un CLI.
+
+    1. `modelos_cmd` del catálogo (solo si no consume cuota, o `probe=True`).
+    2. `config_hints`: archivos de config locales del CLI.
+    Cualquier eslabón ausente/fallido se salta sin abortar (contrato: tolerante).
+    """
+    detected = {}
+
+    cmd = get_catalog_cli_value(existing, catalog, cli, "modelos_cmd", None)
+    consume = bool(get_catalog_cli_value(existing, catalog, cli, "modelos_cmd_consume", False))
+    if cmd and (probe or not consume):
+        try:
+            out = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
+            for line in (out.stdout or "").splitlines():
+                token = line.strip()
+                if _plausible_model_id(token):
+                    detected.setdefault(_normalize_model_id(token), {})
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    for hint in _get_config_hints_for_os(existing, catalog, cli):
+        data = _load_config_file(_platform.expand_portable_path(str(hint)))
+        if data is None:
+            continue
+        for mid, meta in _extract_models(data).items():
+            detected.setdefault(mid, {}).update(meta)
+
+    return detected
+
+
+def apply_detected_models(modelos, detected):
+    """Marca `origen`/`esfuerzos` en los modelos según la evidencia local (CHK017: no borra).
+
+    - Semilla cuyo id matchea un detectado (igual o substring) -> `detectado-local`
+      (+ esfuerzos si el config los declara y el usuario no los fijó).
+    - Detectado sin semilla equivalente -> se agrega con capacidad/costo medios
+      (propuesta corregible por el usuario).
+    - Semilla sin evidencia -> conserva `origen` previo o queda `semilla`.
+    """
+    result = []
+    matched = set()
+    for m in modelos:
+        m = dict(m)
+        mid = str(m.get("id", "")).strip().lower()
+        # Matching exacto-primero; substring solo como respaldo y sobre candidatos
+        # aún libres (evita que 'kimi-for-coding' capture '...-highspeed').
+        hit = mid if mid in detected else None
+        if hit is None:
+            for d in sorted(set(detected) - matched, key=len):
+                if mid in d or d in mid:
+                    hit = d
+                    break
+        if hit:
+            m["origen"] = "detectado-local"
+            matched.add(hit)
+            efforts = (detected.get(hit) or {}).get("esfuerzos")
+            if efforts and "esfuerzos" not in m:
+                m["esfuerzos"] = efforts
+        else:
+            m.setdefault("origen", "semilla")
+        result.append(m)
+    for d in sorted(set(detected) - matched):
+        entry = {
+            "id": d, "capacidad": 5, "costo": 2, "contexto_k": "desconocido",
+            "origen": "detectado-local",
+        }
+        efforts = (detected.get(d) or {}).get("esfuerzos")
+        if efforts:
+            entry["esfuerzos"] = efforts
+        result.append(entry)
+    return result
+
+
+def build_inventory(detections, auth, catalog, existing, detected_models=None):
     clis = {}
     for cli in sorted(detections.keys()):
         det = detections[cli]
@@ -111,6 +291,8 @@ def build_inventory(detections, auth, catalog, existing):
         modelos = get_catalog_cli_value(existing, catalog, cli, "modelos", None)
         if modelos is None:
             modelos = get_catalog_cli_value(None, catalog, cli, "modelos_semilla", [])
+        if detected_models and cli in detected_models:
+            modelos = apply_detected_models(list(modelos or []), detected_models[cli])
         origen = "registrado"
         if isinstance(catalog, dict) and cli in (catalog.get("clis") or {}):
             origen = "catalogo"
@@ -122,6 +304,7 @@ def build_inventory(detections, auth, catalog, existing):
             "origen": origen,
             "plan": get_catalog_cli_value(existing, None, cli, "plan", "desconocido"),
             "cuota": get_catalog_cli_value(existing, None, cli, "cuota", "desconocido"),
+            "verificacion_web": get_catalog_cli_value(existing, None, cli, "verificacion_web", {"estado": "omitida"}),
             "modelos": list(modelos or []),
         }
         deshabilitado = get_catalog_cli_value(existing, None, cli, "deshabilitado", False)
@@ -201,7 +384,7 @@ def write_json2(path, obj):
     _platform.write_utf8_nobom(str(path), json.dumps(obj, indent=2, ensure_ascii=False) + "\n")
 
 
-def scan_models(repo_root=None, force=False, probe_auth=False):
+def scan_models(repo_root=None, force=False, probe_auth=False, probe_models=False):
     if not repo_root:
         repo_root = str(Path(__file__).resolve().parents[3])
     models_path = Path(repo_root) / ".specify" / "models.json"
@@ -234,7 +417,8 @@ def scan_models(repo_root=None, force=False, probe_auth=False):
         else:
             auth[cli] = False
 
-    clis = build_inventory(detections, auth, catalog, existing)
+    detected_models = {c: detect_models(c, existing, catalog, probe_models) for c in names if detections[c]["instalado"]}
+    clis = build_inventory(detections, auth, catalog, existing, detected_models=detected_models)
     proposed = {"clis": clis, "asignacion": build_asignacion(clis)}
     final = merge_preserving_user_edits(proposed, existing, prev_scan, force)
 
@@ -249,9 +433,10 @@ def main(argv=None):
     ap.add_argument("--repo-root", default=None)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--probe-auth", action="store_true")
+    ap.add_argument("--probe-models", action="store_true")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
-    r = scan_models(args.repo_root, args.force, args.probe_auth)
+    r = scan_models(args.repo_root, args.force, args.probe_auth, args.probe_models)
     if args.json:
         summary = {"MODELS_JSON": r["models_path"], "SCAN_JSON": r["scan_path"],
                    "CLIS": {c: {"instalado": r["detections"][c]["instalado"],

@@ -24,6 +24,23 @@
           "~/.claude.json"
         ]
       },
+      "config_hints": {
+        "windows": [
+          "~/.claude.json",
+          "~/.claude/settings.json"
+        ],
+        "linux": [
+          "~/.claude.json",
+          "~/.claude/settings.json"
+        ],
+        "macos": [
+          "~/.claude.json",
+          "~/.claude/settings.json"
+        ]
+      },
+      "fuentes_oficiales": [
+        "https://docs.anthropic.com/en/docs/about-claude/models"
+      ],
       "patrones_cuota": [
         "usage limit",
         "rate limit",
@@ -76,6 +93,20 @@
           "~/.codex/auth.json"
         ]
       },
+      "config_hints": {
+        "windows": [
+          "~/.codex/config.toml"
+        ],
+        "linux": [
+          "~/.codex/config.toml"
+        ],
+        "macos": [
+          "~/.codex/config.toml"
+        ]
+      },
+      "fuentes_oficiales": [
+        "https://developers.openai.com/codex/"
+      ],
       "patrones_cuota": [
         "rate limit",
         "usage",
@@ -133,6 +164,20 @@
           "~/.kimi/credentials.json"
         ]
       },
+      "config_hints": {
+        "windows": [
+          "~/.kimi-code/config.toml"
+        ],
+        "linux": [
+          "~/.kimi-code/config.toml"
+        ],
+        "macos": [
+          "~/.kimi-code/config.toml"
+        ]
+      },
+      "fuentes_oficiales": [
+        "https://platform.moonshot.ai/docs"
+      ],
       "patrones_cuota": [
         "rate limit",
         "quota",

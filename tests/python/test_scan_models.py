@@ -155,3 +155,28 @@ def test_merge_force_gana_proposed():
 def test_merge_sin_existing_devuelve_proposed():
     proposed = {"clis": {}, "asignacion": {"alta": [], "media": [], "baja": []}}
     assert scan_models.merge_preserving_user_edits(proposed, None, None) == proposed
+
+
+def test_inventory_has_origen_y_contrato_intacto():
+    catalog = {
+        "clis": {
+            "ficli": {
+                "modelos_semilla": [
+                    {"id": "m-1", "capacidad": 7, "costo": 2},
+                ],
+            },
+        },
+    }
+    detections = {"ficli": {"instalado": True, "version": "0.1"}}
+    auth = {"ficli": True}
+
+    clis = scan_models.build_inventory(detections, auth, catalog, existing=None, detected_models={})
+
+    modelo = clis["ficli"]["modelos"][0]
+    assert modelo["id"] == "m-1"
+    assert modelo["capacidad"] == 7
+    assert modelo["costo"] == 2
+
+    semillas = catalog["clis"]["ficli"]["modelos_semilla"]
+    con_origen = scan_models.apply_detected_models(semillas, {})
+    assert con_origen[0]["origen"] == "semilla"
