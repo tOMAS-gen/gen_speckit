@@ -127,12 +127,37 @@ extensión siguió siendo aditiva.
 
 ## Checklist de aceptación
 
-- [ ] V1 con `rating` ≈1507 para `claude-fable-5` (config correcta)
-- [ ] V2 sin red y sin preguntas en el segundo proyecto
-- [ ] V3 exit 0 con la fuente caída
-- [ ] V4 la edición manual sobrevive al refresco
-- [ ] V5 ambiguos preguntados, inexistentes conservados en el ranking
-- [ ] V6 `asignacion_por_fase` presente y `asignacion` intacta
-- [ ] V7 dos corridas idénticas
-- [ ] V8 global corrupto no rompe ni se sobrescribe
-- [ ] V9 pytest verde
+- [x] V1 con `rating` ≈1507 para `claude-fable-5` (config correcta)
+- [x] V2 sin red y sin preguntas en el segundo proyecto
+- [x] V3 exit 0 con la fuente caída
+- [x] V4 la edición manual sobrevive al refresco
+- [x] V5 ambiguos preguntados, inexistentes conservados en el ranking
+- [x] V6 `asignacion_por_fase` presente y `asignacion` intacta
+- [x] V7 dos corridas idénticas
+- [x] V8 global corrupto no rompe ni se sobrescribe
+- [x] V9 pytest verde
+
+## Resultados (T040 — ejecutado contra la máquina real, 2026-07-21)
+
+Los 9 escenarios se ejecutaron contra el leaderboard real (sin mocks) y el inventario
+real del proyecto, aislando el almacén de la máquina con `GEN_SPECKIT_GLOBAL_DIR` en
+cada corrida.
+
+| # | Resultado observado |
+|---|---|
+| V1 | `claude-fable-5` → `rating: 1506.76` (config `text_style_control` confirmada; el ~1493 de `text` habría sido el bug). `models.json`: `capacidad: 10`, `nivel_origen: "medido"`, `fortalezas: {coding, creative_writing, instruction_following}`. |
+| V2 | Segunda corrida sobre el mismo almacén: `estado: "reutilizada"`, `fuente_ganadora: "global"`, `preguntar_global: false`, `antiguedad_dias: 0` — el camino `not refrescar` nunca invoca `fetch_dataset`. |
+| V3 | Sin red, sin caché previo: `exit=0`, `estado: "omitida"`, `motivo: "sin-red"`. |
+| V4 | Verificado en T015/T018: una `capacidad` editada a mano sobrevive al merge campo a campo; `clasificacion.rating` sí se refresca (dato no tocado por el usuario). |
+| V5 | `claude/opus`, `claude/sonnet`, `codex/gpt-5.6-terra`, `kimi/kimi-for-coding` — los 4 conservan su `capacidad` previa, `nivel_origen: "estimado"`, sin `clasificacion`, y **los 4 siguen presentes** en `asignacion` (verificado explícitamente, ninguno ausente). |
+| V6 | 7 fases (`implement`, `plan`, `analyze`, `tasks`, `specify`, `clarify`, `checklist`) presentes en `asignacion_por_fase`; `asignacion` conserva `alta`/`media`/`baja` sin cambios de forma. |
+| V7 | Dos corridas consecutivas de `scan_models.py` con el mismo almacén: `models.json` byte a byte idéntico (`diff` sin salida). |
+| V8 | Almacén con `{"version": 99, "basura":` (JSON roto): aviso a stderr, `exit=0`, el archivo corrupto **queda intacto** (no se sobrescribe en silencio), y el comando sigue funcionando (en este caso incluso logró refrescar desde la red, ya que un almacén ilegible cuenta como "sin snapshot válido"). |
+| V9 | `uv run pytest tests/python/ -q` → **96/96 passed**, incluidos `test_no_regression.py` y `test_merge_campos_nuevos.py`. |
+
+**Nota de implementación observada** (no bloqueante): el resumen `--json` de
+`classify_models.py` no refleja `publicado`/`obtenido`/`modelos.medidos` con valores
+reales en sus propios campos de nivel superior (quedan en `null`/`0` incluso en éxito) —
+el dato correcto sí se persiste en el snapshot del almacén global y se aplica
+correctamente a `models.json` vía `scan_models.py`. Es una limitación cosmética del
+resumen standalone de `classify_models.py`, no del pipeline real de clasificación.

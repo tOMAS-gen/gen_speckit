@@ -22,6 +22,16 @@ _spec = importlib.util.spec_from_file_location("_gen_platform", _HELPER)
 _platform = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_platform)
 
+# Clasificación de niveles desde fuente externa (feature 007). Import por ruta,
+# igual que platform_helper; si el archivo no existe (proyecto sin la feature),
+# el paso de clasificación se saltea y el escaneo funciona como siempre.
+_CLASSIFY_PATH = Path(__file__).resolve().parent / "classify_models.py"
+_classify_module = None
+if _CLASSIFY_PATH.is_file():
+    _cspec = importlib.util.spec_from_file_location("_gen_classify", _CLASSIFY_PATH)
+    _classify_module = importlib.util.module_from_spec(_cspec)
+    _cspec.loader.exec_module(_classify_module)
+
 DEFAULT_QUOTA_PATTERNS = ["rate limit", "quota", r"\b429\b", "usage limit"]
 
 
@@ -350,9 +360,116 @@ def build_asignacion(clis):
     return asignacion
 
 
+def build_asignacion_por_fase(clis, catalogo_clasificacion):
+    """Ranking por fase según fortalezas por categoría (T028, feature 007).
+
+    Mismo criterio de elegibilidad que build_asignacion(): solo CLIs instalados
+    y no deshabilitados, y ningún modelo elegible queda excluido (Constitución IV).
+    Puntaje: promedio de las fortalezas presentes en las categorías de la fase;
+    sin fortalezas aplicables, la capacidad general. Orden: puntaje descendente,
+    empate por costo ascendente (sorted() estable conserva el orden de aparición).
+    """
+    categorias_por_fase = catalogo_clasificacion.get("categorias_por_fase", {})
+    if not categorias_por_fase:
+        return {}
+
+    available = []
+    for cli, entry in clis.items():
+        if not entry.get("instalado"):
+            continue
+        if entry.get("deshabilitado"):
+            continue
+        for m in entry.get("modelos", []):
+            available.append({"ref": f"{cli}/{m.get('id')}",
+                              "capacidad": m.get("capacidad", 0),
+                              "costo": m.get("costo", 0),
+                              "fortalezas": m.get("fortalezas") or {}})
+
+    asignacion = {}
+    for fase, categorias in categorias_por_fase.items():
+        def puntaje(a, _categorias=categorias):
+            presentes = [a["fortalezas"][c] for c in _categorias if c in a["fortalezas"]]
+            if presentes:
+                return sum(presentes) / len(presentes)
+            return a["capacidad"]
+
+        ordenados = sorted(available, key=lambda a: (-puntaje(a), a["costo"]))
+        asignacion[fase] = [a["ref"] for a in ordenados]
+    return asignacion
+
+
+def classify_inventory(clis, repo_root):
+    """Aplica la clasificación del leaderboard sobre el inventario (feature 007).
+
+    Se ejecuta ANTES de build_asignacion() para que el ranking ya refleje los
+    niveles medidos, y ANTES del merge para que merge_preserving_user_edits()
+    haga valer las correcciones manuales del usuario sin código nuevo (R7).
+    Best-effort (FR-018): sin bloque "clasificacion" en el catálogo, sin
+    classify_models.py o con la fuente externa caída, devuelve `clis` intacto.
+
+    Devuelve (clis_actualizado, ambiguos): `ambiguos` es la lista de
+    {"ref": cli_modelo, "candidatos": [model_name, ...]} sin resolver, para que
+    quien llame (la skill) se la pueda ofrecer al usuario. Lista vacía si no
+    hubo clasificación o no quedó ningún caso dudoso.
+    """
+    if _classify_module is None:
+        return clis, []
+    catalogo_clasificacion = _classify_module.get_catalog_classification(repo_root)
+    if not catalogo_clasificacion or "escala" not in catalogo_clasificacion:
+        return clis, []
+    # FR-018: único punto del proyecto donde se captura Exception a secas —
+    # ninguna falla de red/parseo de la fuente externa puede interrumpir el
+    # escaneo completo; se degrada a "sin clasificación" y se sigue.
+    try:
+        datos = _classify_module.fetch_dataset("overall", catalogo_clasificacion)
+        if datos is None:
+            print("Aviso: clasificación omitida (fuente externa no disponible).",
+                  file=sys.stderr)
+            return clis, []
+        entradas = _classify_module.normalize_rows(
+            datos, catalogo_clasificacion.get("votos_minimos", 500))
+        actualizado, ambiguos = _classify_module.aplicar_clasificacion_al_inventario(
+            {"clis": clis}, catalogo_clasificacion, entradas)
+        # Fortalezas por categoría (T028): para cada modelo con clasificación
+        # resuelta, capacidad medida en las categorías que usan las fases.
+        categorias_por_fase = catalogo_clasificacion.get("categorias_por_fase", {})
+        categorias_unicas = list(dict.fromkeys(
+            c for cats in categorias_por_fase.values() for c in cats))
+        entradas_por_categoria = _classify_module.fetch_categorias(
+            categorias_unicas, catalogo_clasificacion)
+        for info in actualizado["clis"].values():
+            for modelo in info.get("modelos", []):
+                clasificacion = modelo.get("clasificacion") if isinstance(modelo, dict) else None
+                if not isinstance(clasificacion, dict):
+                    continue
+                fortalezas = _classify_module.calcular_fortalezas(
+                    clasificacion["entrada"], entradas_por_categoria,
+                    catalogo_clasificacion["escala"])
+                if fortalezas:
+                    modelo["fortalezas"] = fortalezas
+        if ambiguos:
+            refs = ", ".join(str(a.get("ref")) for a in ambiguos)
+            print(f"Aviso: clasificación ambigua para: {refs} "
+                  "(se resuelve con el usuario desde la skill).", file=sys.stderr)
+        return actualizado["clis"], ambiguos
+    except Exception as exc:
+        print(f"Aviso: clasificación omitida ({exc}); el escaneo continúa.",
+              file=sys.stderr)
+        return clis, []
+
+
 def _canonical(value):
     """JSON comparable (mismo criterio que ConvertTo-CanonicalJson: compacto ordenado)."""
     return json.dumps(value, sort_keys=True, ensure_ascii=False)
+
+
+def _is_keyed_list(value):
+    """Lista de dicts con clave "id" estable en todos sus elementos (p.ej. modelos[])."""
+    return (
+        isinstance(value, list)
+        and len(value) > 0
+        and all(isinstance(x, dict) and "id" in x for x in value)
+    )
 
 
 def merge_node(prop, exis, prev):
@@ -368,7 +485,37 @@ def merge_node(prop, exis, prev):
             else:
                 out[k] = merge_node(prop[k], exis[k], prev_child)
         return out
-    # Hojas/arrays: si el existente difiere de la propuesta previa -> edición manual, prevalece.
+
+    # Listas de dicts con "id" estable (p.ej. modelos[]): mergear por elemento en
+    # vez de tratar la lista entera como un bloque atómico. Sin esto, un campo
+    # nuevo (p.ej. la clasificación de la feature 007) se pierde apenas la lista
+    # difiere de la propuesta previa en CUALQUIER otro punto — que en un
+    # proyecto con historia es casi siempre. La corrección manual de un campo
+    # sigue prevaleciendo, pero campo a campo, no lista completa contra lista completa.
+    if _is_keyed_list(prop) and _is_keyed_list(exis):
+        prev_by_id = {}
+        if isinstance(prev, list):
+            for item in prev:
+                if isinstance(item, dict) and "id" in item:
+                    prev_by_id[item["id"]] = item
+        exis_by_id = {item["id"]: item for item in exis}
+        out = []
+        seen = set()
+        for item in prop:
+            mid = item["id"]
+            seen.add(mid)
+            if mid in exis_by_id:
+                out.append(merge_node(item, exis_by_id[mid], prev_by_id.get(mid)))
+            else:
+                out.append(item)
+        # Preservar entradas existentes que el usuario agregó a mano y no
+        # vinieron en la propuesta nueva (p.ej. un modelo declarado manualmente).
+        for item in exis:
+            if item["id"] not in seen:
+                out.append(item)
+        return out
+
+    # Hojas/arrays sin "id" estable: si el existente difiere de la propuesta previa -> edición manual, prevalece.
     exis_json = _canonical(exis)
     prev_json = _canonical(prev) if prev is not None else None
     return exis if (prev_json is None or exis_json != prev_json) else prop
@@ -419,13 +566,20 @@ def scan_models(repo_root=None, force=False, probe_auth=False, probe_models=Fals
 
     detected_models = {c: detect_models(c, existing, catalog, probe_models) for c in names if detections[c]["instalado"]}
     clis = build_inventory(detections, auth, catalog, existing, detected_models=detected_models)
+    clis, ambiguos = classify_inventory(clis, repo_root)
     proposed = {"clis": clis, "asignacion": build_asignacion(clis)}
+    if _classify_module is not None:
+        catalogo_clasificacion = _classify_module.get_catalog_classification(repo_root)
+        asignacion_por_fase = build_asignacion_por_fase(clis, catalogo_clasificacion)
+        if asignacion_por_fase:
+            proposed["asignacion_por_fase"] = asignacion_por_fase
     final = merge_preserving_user_edits(proposed, existing, prev_scan, force)
 
     write_json2(scan_path, proposed)
     write_json2(models_path, final)
     return {"models_path": str(models_path), "scan_path": str(scan_path),
-            "detections": detections, "auth": auth, "names": names}
+            "detections": detections, "auth": auth, "names": names,
+            "ambiguos": ambiguos}
 
 
 def main(argv=None):
@@ -442,6 +596,8 @@ def main(argv=None):
                    "CLIS": {c: {"instalado": r["detections"][c]["instalado"],
                                 "version": r["detections"][c]["version"],
                                 "autenticado": r["auth"][c]} for c in r["names"]}}
+        if r.get("ambiguos"):
+            summary["AMBIGUOS"] = r["ambiguos"]
         print(json.dumps(summary, ensure_ascii=False))
     else:
         print(f"Inventario escrito en {r['models_path']}")

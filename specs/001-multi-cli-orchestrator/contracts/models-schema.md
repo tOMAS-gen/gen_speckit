@@ -40,12 +40,30 @@ prioridad) y triage/asignador/orquestador (consumidores). `update-quota.ps1` es 
                 "id":         { "type": "string", "minLength": 1 },
                 "capacidad":  { "type": "integer", "minimum": 1, "maximum": 10 },
                 "costo":      { "type": "integer", "minimum": 1, "maximum": 3 },
-                "contexto_k": { "type": ["integer", "string"] }
+                "contexto_k": { "type": ["integer", "string"] },
+                "nivel_origen": { "enum": ["medido", "estimado", "manual"] },
+                "clasificacion": {
+                  "type": "object",
+                  "properties": {
+                    "entrada":     { "type": "string" },
+                    "rating":      { "type": "number" },
+                    "publicado":   { "type": "string" },
+                    "fuente_dato": { "enum": ["global", "local"] }
+                  }
+                },
+                "fortalezas": {
+                  "type": "object",
+                  "additionalProperties": { "type": "integer", "minimum": 1, "maximum": 10 }
+                }
               }
             }
           }
         }
       }
+    },
+    "asignacion_por_fase": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/listaCandidatos" }
     },
     "asignacion": {
       "type": "object",
@@ -88,6 +106,12 @@ prioridad) y triage/asignador/orquestador (consumidores). `update-quota.ps1` es 
 7. **Reset desconocido**: si el plan del CLI es `"desconocido"`, al agotarse la cuota
    se escribe `cuota_reset: "desconocido"` y el estado `agotada` persiste hasta reset
    manual del usuario (FR-018).
+8. **Aditividad de feature 007**: los campos `nivel_origen`, `clasificacion`,
+   `fortalezas` y la sección `asignacion_por_fase` son opcionales y aditivos. Un
+   `models.json` sin ninguno de ellos sigue siendo válido y ningún consumidor
+   existente puede requerirlos. Ver el contrato completo en
+   `specs/007-arena-model-ranking/contracts/classification.md` (obtención de datos,
+   almacén de la máquina y reglas de precedencia).
 
 ## Ejemplo completo válido
 
@@ -99,7 +123,16 @@ prioridad) y triage/asignador/orquestador (consumidores). `update-quota.ps1` es 
       "headless": "claude -p \"{prompt}\" --dangerously-skip-permissions --output-format json",
       "plan": "Max 5x", "cuota": "ok",
       "modelos": [
-        { "id": "opus",   "capacidad": 9, "costo": 3, "contexto_k": 200 },
+        {
+          "id": "opus", "capacidad": 9, "costo": 3, "contexto_k": 200,
+          "nivel_origen": "medido",
+          "clasificacion": {
+            "entrada": "claude-opus-4-8",
+            "rating": 1507.48,
+            "publicado": "2026-07-16",
+            "fuente_dato": "global"
+          }
+        },
         { "id": "sonnet", "capacidad": 7, "costo": 2, "contexto_k": 200 }
       ]
     },
@@ -127,6 +160,10 @@ prioridad) y triage/asignador/orquestador (consumidores). `update-quota.ps1` es 
     "alta":  ["claude/opus", "codex/gpt-5-codex"],
     "media": ["codex/gpt-5-codex", "claude/sonnet", "kimi/k2"],
     "baja":  ["kimi/k2", "codex/gpt-5-mini", "claude/sonnet"]
+  },
+  "asignacion_por_fase": {
+    "implement": ["claude/opus", "codex/gpt-5-codex"],
+    "plan":      ["claude/opus"]
   }
 }
 ```

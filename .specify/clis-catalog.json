@@ -1,5 +1,23 @@
 {
   "version": 1,
+  "clasificacion": {
+    "dataset_url": "https://datasets-server.huggingface.co/filter",
+    "dataset": "lmarena-ai/leaderboard-dataset",
+    "config": "text_style_control",
+    "split": "latest",
+    "url_web": "https://arena.ai/leaderboard/text",
+    "frescura_dias": 7,
+    "votos_minimos": 500,
+    "timeout_s": 25,
+    "escala": { "piso": 950, "paso": 56 },
+    "categorias_por_fase": {
+      "implement": ["coding"],
+      "plan": ["math"], "analyze": ["math"], "tasks": ["math"],
+      "specify": ["creative_writing", "instruction_following"],
+      "clarify": ["instruction_following"], "checklist": ["instruction_following"]
+    },
+    "alias": { "claude/fable": "claude-fable-5" }
+  },
   "patrones_cuota_genericos": [
     "rate limit",
     "quota",

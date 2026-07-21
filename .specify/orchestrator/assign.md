@@ -49,6 +49,29 @@ Si ningún candidato del nivel califica → escalar al nivel superior (baja→me
 registrar el motivo en Eventos. Si tampoco → dejar la tarea SIN `[M:]` y reportarla
 como no asignable (el orquestador la bloqueará hasta que haya cuota o corrección).
 
+## Refinamiento por fase (opcional)
+
+Si `.specify/models.json` tiene `asignacion_por_fase`, usarla para ordenar los
+candidatos YA calificados del Paso 2, no para filtrarlos:
+
+- Las tareas de historias de usuario van a la fase `implement`, salvo que su
+  descripción indique otra fase del pipeline (`plan`, `analyze`, `tasks`,
+  `specify`, `clarify`, `checklist`).
+- Las tareas de Setup/Foundational no tienen fase de pipeline asociada; usar
+  directamente el orden de `asignacion.<nivel>`.
+- Para la fase detectada, ordenar los candidatos que pasaron los filtros del
+  Paso 2 según su posición en `asignacion_por_fase.<fase>`; el primero de esa
+  lista que también esté calificado en el nivel es el elegido.
+- Si la fase no está en `asignacion_por_fase`, volver al orden normal de
+  `asignacion.<nivel>`.
+
+Este refinamiento es opcional. `asignacion.<nivel>` sigue decidiendo qué
+candidatos califican por complejidad, cuota y contexto. `asignacion_por_fase`
+solo altera el orden de preferencia entre ellos cuando está disponible.
+
+Si `asignacion_por_fase` no existe en `models.json`, ejecutar el Paso 2 tal cual:
+sin advertencias, sin cambios de comportamiento.
+
 ## Paso 3 — Verificar el reparto (Constitución IV, SC-003)
 
 Tras asignar todo:

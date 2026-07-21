@@ -19,14 +19,17 @@ _Actualizado: 2026-07-18_
 
 **Es**: fork de spec-kit con las mejoras multi-CLI dentro de `specify-cli` (un solo
 `specify init`); skills y playbooks Markdown portables; scripts de soporte en **Python**
-(multiplataforma); inventario y ranking de modelos (`models.json`); pipelines de una sola
-llamada (IDEAL y ECO); asignación de tareas por complejidad; orquestación con despacho
-headless, paralelismo y fallback por cuota; especificador de agentes y README gestionado.
+(multiplataforma); inventario y ranking de modelos (`models.json`) enriquecido con el
+nivel medido contra un leaderboard público y un reparto por tipo de fase, con la
+clasificación y los planes contratados compartidos una sola vez por máquina; pipelines
+de una sola llamada (IDEAL y ECO); asignación de tareas por complejidad; orquestación con
+despacho headless, paralelismo y fallback por cuota; especificador de agentes y README
+gestionado.
 
 **No es**: no modifica las skills base ni el formato de artefactos de spec-kit; no usa
 API keys (solo los CLIs con sus suscripciones).
 
-_Actualizado: 2026-07-18_
+_Actualizado: 2026-07-21_
 <!-- speckit:alcance:fin -->
 
 <!-- speckit:estado:inicio -->
@@ -39,8 +42,10 @@ _Actualizado: 2026-07-18_
 | 003 — Soporte Genérico de CLIs y Multiplataforma | Implementada | Cualquier CLI registrable sin tocar código |
 | 004 — Fork de specify-cli (init de un solo paso) | Implementada | `specify init` entrega base + producto, validado con el CLI real |
 | 005 — Scripts de soporte en Python (multiplataforma) | Implementada | Corre con solo Python; CI verde en Windows/Linux/macOS |
+| 006 — Descubrimiento real de modelos por CLI | Implementada | Modelos reales detectados por CLI (config local + verificación web best-effort) |
+| 007 — Clasificación de modelos por nivel y tarea (arena.ai) | Implementada | Nivel medido contra leaderboard público; reparto por fase; clasificación compartida por máquina |
 
-_Actualizado: 2026-07-18_
+_Actualizado: 2026-07-21_
 <!-- speckit:estado:fin -->
 
 ## Instalación

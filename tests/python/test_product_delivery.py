@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -78,12 +79,24 @@ def test_python_scripts_deposited(tmp_path: Path) -> None:
         "get_parallel_groups.py",
         "clis_config.py",
         "platform_helper.py",
+        "classify_models.py",
     ):
         assert (scripts_dir / script).is_file(), f"falta {scripts_dir / script}"
 
 
 def test_catalogo_clis(project_root: Path) -> None:
     assert (project_root / ".specify" / "clis-catalog.json").is_file()
+
+
+def test_catalogo_clis_tiene_clasificacion(project_root: Path) -> None:
+    catalog_path = project_root / ".specify" / "clis-catalog.json"
+    with open(catalog_path, encoding="utf-8") as f:
+        catalog = json.load(f)
+    assert "clasificacion" in catalog, "falta la clave 'clasificacion' en el catálogo"
+    clasificacion = catalog["clasificacion"]
+    required_keys = ("dataset_url", "config", "escala", "categorias_por_fase")
+    for key in required_keys:
+        assert key in clasificacion, f"falta la clave '{key}' en el bloque 'clasificacion'"
 
 
 def test_agents_md(project_root: Path) -> None:
