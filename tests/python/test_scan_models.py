@@ -155,3 +155,70 @@ def test_merge_force_gana_proposed():
 def test_merge_sin_existing_devuelve_proposed():
     proposed = {"clis": {}, "asignacion": {"alta": [], "media": [], "baja": []}}
     assert scan_models.merge_preserving_user_edits(proposed, None, None) == proposed
+
+
+def test_inventory_has_origen_y_contrato_intacto():
+    catalog = {
+        "clis": {
+            "ficli": {
+                "modelos_semilla": [
+                    {"id": "m-1", "capacidad": 7, "costo": 2},
+                ],
+            },
+        },
+    }
+    detections = {"ficli": {"instalado": True, "version": "0.1"}}
+    auth = {"ficli": True}
+
+    clis = scan_models.build_inventory(detections, auth, catalog, existing=None, detected_models={})
+
+    modelo = clis["ficli"]["modelos"][0]
+    assert modelo["id"] == "m-1"
+    assert modelo["capacidad"] == 7
+    assert modelo["costo"] == 2
+
+    semillas = catalog["clis"]["ficli"]["modelos_semilla"]
+    con_origen = scan_models.apply_detected_models(semillas, {})
+    assert con_origen[0]["origen"] == "semilla"
+
+
+# ------------------------------------------------- merge preserva corrección manual de nivel (T018)
+
+def _modelo_fable(capacidad, rating, nivel_origen="medido"):
+    return {
+        "id": "fable",
+        "capacidad": capacidad,
+        "costo": 3,
+        "nivel_origen": nivel_origen,
+        "clasificacion": {
+            "entrada": "claude-fable-5",
+            "rating": rating,
+            "publicado": "2026-07-19" if rating > 1500 else "2026-07-01",
+        },
+    }
+
+
+def test_merge_preserving_user_edits_mantiene_correccion_manual_de_nivel():
+    prev_scan = {"clis": {"claude": {"modelos": [_modelo_fable(7, 1507.0)]}}}
+    existing = {"clis": {"claude": {"modelos": [_modelo_fable(3, 1507.0, "manual")]}}}
+    proposed = {"clis": {"claude": {"modelos": [_modelo_fable(9, 1550.0)]}}}
+
+    final = scan_models.merge_preserving_user_edits(proposed, existing, prev_scan)
+
+    modelo = final["clis"]["claude"]["modelos"][0]
+    assert modelo["capacidad"] == 3
+    assert modelo["nivel_origen"] == "manual"
+    # campos no editados por el usuario siguen la propuesta nueva
+    assert modelo["clasificacion"]["rating"] == 1550.0
+
+
+def test_merge_node_mantiene_correccion_manual_de_nivel():
+    prev_scan_modelo = _modelo_fable(7, 1507.0)
+    existing_modelo = _modelo_fable(3, 1507.0, "manual")
+    proposed_modelo = _modelo_fable(9, 1550.0)
+
+    final = scan_models.merge_node(proposed_modelo, existing_modelo, prev_scan_modelo)
+
+    assert final["capacidad"] == 3
+    assert final["nivel_origen"] == "manual"
+    assert final["clasificacion"]["rating"] == 1550.0

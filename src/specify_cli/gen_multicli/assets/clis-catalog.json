@@ -1,5 +1,23 @@
 {
   "version": 1,
+  "clasificacion": {
+    "dataset_url": "https://datasets-server.huggingface.co/filter",
+    "dataset": "lmarena-ai/leaderboard-dataset",
+    "config": "text_style_control",
+    "split": "latest",
+    "url_web": "https://arena.ai/leaderboard/text",
+    "frescura_dias": 7,
+    "votos_minimos": 500,
+    "timeout_s": 25,
+    "escala": { "piso": 950, "paso": 56 },
+    "categorias_por_fase": {
+      "implement": ["coding"],
+      "plan": ["math"], "analyze": ["math"], "tasks": ["math"],
+      "specify": ["creative_writing", "instruction_following"],
+      "clarify": ["instruction_following"], "checklist": ["instruction_following"]
+    },
+    "alias": { "claude/fable": "claude-fable-5" }
+  },
   "patrones_cuota_genericos": [
     "rate limit",
     "quota",
@@ -24,6 +42,23 @@
           "~/.claude.json"
         ]
       },
+      "config_hints": {
+        "windows": [
+          "~/.claude.json",
+          "~/.claude/settings.json"
+        ],
+        "linux": [
+          "~/.claude.json",
+          "~/.claude/settings.json"
+        ],
+        "macos": [
+          "~/.claude.json",
+          "~/.claude/settings.json"
+        ]
+      },
+      "fuentes_oficiales": [
+        "https://docs.anthropic.com/en/docs/about-claude/models"
+      ],
       "patrones_cuota": [
         "usage limit",
         "rate limit",
@@ -76,6 +111,20 @@
           "~/.codex/auth.json"
         ]
       },
+      "config_hints": {
+        "windows": [
+          "~/.codex/config.toml"
+        ],
+        "linux": [
+          "~/.codex/config.toml"
+        ],
+        "macos": [
+          "~/.codex/config.toml"
+        ]
+      },
+      "fuentes_oficiales": [
+        "https://developers.openai.com/codex/"
+      ],
       "patrones_cuota": [
         "rate limit",
         "usage",
@@ -133,6 +182,20 @@
           "~/.kimi/credentials.json"
         ]
       },
+      "config_hints": {
+        "windows": [
+          "~/.kimi-code/config.toml"
+        ],
+        "linux": [
+          "~/.kimi-code/config.toml"
+        ],
+        "macos": [
+          "~/.kimi-code/config.toml"
+        ]
+      },
+      "fuentes_oficiales": [
+        "https://platform.moonshot.ai/docs"
+      ],
       "patrones_cuota": [
         "rate limit",
         "quota",
