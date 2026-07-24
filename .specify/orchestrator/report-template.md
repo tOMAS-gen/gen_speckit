@@ -17,14 +17,15 @@
 
 ## Modelos por fase
 
-| Fase | Modelo asignado | Estado |
-|------|-----------------|--------|
-| specify | cli/modelo | pendiente |
-| plan | cli/modelo | pendiente |
-| tasks | cli/modelo | pendiente |
-| implement | (por tarea, ver Asignaciones) | pendiente |
+| Fase | Modelo asignado | Efectivo | Estado |
+|------|-----------------|----------|--------|
+| specify | cli/modelo | — | pendiente |
+| plan | cli/modelo | — | pendiente |
+| tasks | cli/modelo | — | pendiente |
+| implement | (por tarea, ver Asignaciones) | — | pendiente |
 
-<!-- Estados válidos: pendiente | ejecutada | omitida. Filas según el flujo elegido. -->
+<!-- Estados válidos: pendiente | ejecutada | omitida. Filas según el flujo elegido.
+     Columna Efectivo: registra el modelo que realmente ejecutó la fase, igual al asignado salvo fallback; — mientras pendiente. Los parsers deben tolerar tablas de 3 columnas en reportes viejos y 4 en nuevos. -->
 
 ## Asignaciones
 
@@ -43,6 +44,8 @@
 ## Métricas
 
 <!-- Al cierre de la orquestación:
+     - Desglose de fases por modelo
+     - Porcentaje del trabajo total fases más tareas ejecutado por modelos económicos (costo < 3)
      - Tareas por modelo (tabla o lista)
      - % de tareas ejecutadas por modelos económicos (costo < 3)
      - Consumo estimado del modelo caro vs. baseline (SC-004), en la unidad que

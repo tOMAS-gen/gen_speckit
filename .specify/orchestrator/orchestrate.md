@@ -11,9 +11,13 @@
    `.specify/models.json`. Inventario faltante/inválido → informar, ofrecer
    `/speckit-models`, detenerse.
 2. Validar cada etiqueta `[M:cli/modelo]` contra el inventario: CLI instalado y modelo
-   existente. Etiqueta inválida → aplicar el primer candidato válido de
+   existente, **y habilitado** — un CLI con `deshabilitado: true` o un modelo con
+   `deshabilitado: true` en `modelos[]` se trata como etiqueta inválida (la tarea se
+   reasigna, FR-008a). Si hay `preferido: "<cli>"` a nivel raíz, los candidatos de
+   reemplazo se restringen a ese agente y se registra en Eventos que la restricción es
+   decisión del usuario. Etiqueta inválida → aplicar el primer candidato válido de
    `asignacion.<C de la tarea>` e informarlo; sin candidatos → tarea no despachable,
-   pedir corrección.
+   pedir corrección (si la causa es configuración del usuario, decirlo explícito).
 3. Tareas sin `[M:]` → reportarlas como sin asignar y ofrecer correr el playbook
    `assign.md` antes de continuar.
 4. **Retome**: si hay tareas ya `[X]`, esto es una reanudación — despachar solo las
@@ -47,6 +51,13 @@ Para cada tarea del grupo:
       --prompt "<prompt empaquetado>" --models-path .specify/models.json `
       --log-dir specs/<feature>/orchestration-logs --log-base-name <T###>
   ```
+
+  **Prompts largos (>~7000 caracteres) o con caracteres problemáticos para el shell
+  (`|`, `<`, `>`)**: escribir el prompt en un archivo dentro del repo (p. ej.
+  `specs/<feature>/.phase-dispatch/<T###>.prompt.md`) y despachar con
+  `--prompt-file <ruta>` en lugar de `--prompt` — el comando lleva solo un puntero
+  corto y evita el límite de línea de comandos de Windows (~8191 chars) y el colapso
+  de whitespace.
 
   Los grupos paralelos se lanzan como jobs concurrentes (`Start-Job` o procesos en
   background); esperar TODO el grupo antes de verificar y pasar al siguiente.

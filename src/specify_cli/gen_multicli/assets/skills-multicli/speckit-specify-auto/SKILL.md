@@ -26,11 +26,12 @@ El texto que el usuario escribió después de `/speckit-specify-auto` es la **de
 
 1. **Ejecutar las fases estrictamente en este orden**, sin saltear ninguna:
    `specify → clarify → plan → checklist → tasks → analyze → [gate] → implement`
-2. **Cada fase se ejecuta invocando la skill base correspondiente** (`Skill` tool: `speckit-specify`, `speckit-clarify`, etc.) y siguiendo sus instrucciones completas. No reimplementar lo que la skill base ya hace.
+2. **Cada fase se ejecuta invocando la skill base correspondiente** (`Skill` tool: `speckit-specify`, `speckit-clarify`, etc.) y siguiendo sus instrucciones completas. No reimplementar lo que la skill base ya hace. **Excepción — despacho de fases** (con `.specify/models.json` válido): antes de ejecutar cada fase, consultar la tabla "Modelos por fase" del reporte de orquestación; si el modelo asignado NO es el principal, ejecutar la fase vía el playbook `.specify/orchestrator/dispatch-phase.md` (el secundario produce el artefacto siguiendo las instrucciones de la skill base empaquetadas en el prompt de fase; el principal verifica en 2 niveles y cierra la fila con `Efectivo` + estado). Si el asignado es el principal, no hay candidatos con cuota, no hay inventario, o el usuario pidió modo clásico → ejecutar la skill base en sesión como siempre (FR-013) y registrarlo.
 3. **Una fase debe terminar exitosamente antes de empezar la siguiente.** Si una fase falla o queda bloqueada, detener el pipeline, reportar el estado y qué falta para retomar.
 4. **La interacción con el usuario ocurre solo donde corresponde**: las preguntas de clarificación de specify/clarify, los hallazgos críticos de analyze y el gate previo a implement. No pedir confirmación entre las demás fases — encadenarlas automáticamente.
 5. **Anunciar cada fase** antes de ejecutarla con una línea breve: `▶ Fase N/7: <nombre>` — para que el usuario sepa siempre dónde está el pipeline.
-6. **Retomable**: antes de empezar, revisar `.specify/feature.json` y el directorio de la feature en `specs/`. Si ya existen artefactos de fases previas (spec.md, plan.md, tasks.md...), preguntar al usuario si desea retomar desde la primera fase faltante o empezar una feature nueva. Un artefacto incompleto o corrupto (no parsea, le faltan secciones obligatorias de su template) se trata como faltante: informar qué tiene de malo y ofrecer regenerarlo desde esa fase — nunca continuar en silencio sobre un artefacto inválido. En implement, retomar = despachar solo tareas sin `[X]`, reconstruyendo el estado desde `tasks.md` y el reporte de orquestación.
+6. **Retomable**: antes de empezar, revisar `.specify/feature.json` y el directorio de la feature en `specs/`. Si ya existen artefactos de fases previas (spec.md, plan.md, tasks.md...), preguntar al usuario si desea retomar desde la primera fase faltante o empezar una feature nueva. Un artefacto incompleto o corrupto (no parsea, le faltan secciones obligatorias de su template) se trata como faltante: informar qué tiene de malo y ofrecer regenerarlo desde esa fase — nunca continuar en silencio sobre un artefacto inválido. Con despacho de fases activo, el retome relee la tabla "Modelos por fase" del reporte y ejecuta solo las filas `pendiente`, reutilizando los intermedios de `specs/<feature>/.phase-dispatch/` si existen. En implement, retomar = despachar solo tareas sin `[X]`, reconstruyendo el estado desde `tasks.md` y el reporte de orquestación.
+7. **Fases con interacción despachadas** (clarify, analyze con modelo distinto del principal): patrón de dos despachos del playbook dispatch-phase.md — despacho A produce las preguntas/hallazgos como artefacto; la conversación con el usuario la conduce SIEMPRE el principal en su sesión; despacho B integra las respuestas en el artefacto de la fase; el principal verifica cada mitad. El trabajo analítico queda en el modelo asignado; el principal solo conversa y verifica.
 
 ## Pre-fase — Triage multi-CLI (antes de ejecutar cualquier fase)
 
@@ -112,6 +113,10 @@ Al terminar (o al detenerse), reportar:
 - Fases completadas y fase donde se detuvo (si aplica)
 - Resultado de checklists y analyze
 - Tareas completadas vs. pendientes (si se llegó a implement)
+- Con despacho de fases activo: en la sección Métricas de
+  `orchestration-report.md`, incluir el desglose de fases por modelo Efectivo y el
+  porcentaje del trabajo total (fases + tareas) ejecutado por modelos económicos
+  (costo < 3)
 - Próximo paso sugerido
 
 ## Cuándo termina

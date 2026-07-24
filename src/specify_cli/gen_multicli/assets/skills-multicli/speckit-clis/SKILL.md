@@ -142,10 +142,88 @@ usuario.
    (`headless`, `modelos`, `patrones_cuota`, `plan`, `cuota`, etc.) quedan
    intactos.
 
+## MODELOS Y AGENTE PREFERIDO
+
+### Deshabilitar un modelo
+
+1. **Obtener las advertencias** de tareas pendientes que etiquetan ese modelo:
+
+   ```bash
+   python -c "import importlib.util as u, pathlib; s=u.spec_from_file_location('cc', '.specify/scripts/python/clis_config.py'); m=u.module_from_spec(s); s.loader.exec_module(m); print(m.get_active_cli_task_labels('.specify/models.json', '<nombre>'))"
+   ```
+
+   Mostrar al usuario cualquier tarea pendiente (`[ ]`) que contenga `[M:<nombre>/<modelo_id>]`.
+   Advertir: "Estas tareas se reasignaran al despachar (se excluira este modelo
+   del reparto)".
+
+2. **Ejecutar**:
+
+   ```bash
+   python .specify/scripts/python/clis_config.py \
+     --accion modelo-deshabilitar \
+     --models-path ".specify/models.json" \
+     --cli "<nombre>" \
+     --modelo "<modelo_id>"
+   ```
+
+3. **Efecto**: el modelo queda marcado con `deshabilitado: true` en `modelos[]`;
+   no aparecera en asignaciones ni en fallbacks de fases o tareas.
+
+### Habilitar un modelo
+
+1. **Ejecutar**:
+
+   ```bash
+   python .specify/scripts/python/clis_config.py \
+     --accion modelo-habilitar \
+     --models-path ".specify/models.json" \
+     --cli "<nombre>" \
+     --modelo "<modelo_id>"
+   ```
+
+2. **Efecto**: el modelo vuelve a participar en asignaciones y fallbacks.
+
+### Fijar agente preferido
+
+1. **Advertencias**:
+   - Si el CLI esta deshabilitado (`deshabilitado: true` a nivel CLI): advertir
+     "El CLI preferido esta deshabilitado; solo el agente principal ejecutara fases".
+   - Si el CLI no tiene modelos habilitados: advertir "El CLI preferido no tiene
+     modelos habilitados; solo el agente principal ejecutara fases".
+
+2. **Ejecutar**:
+
+   ```bash
+   python .specify/scripts/python/clis_config.py \
+     --accion preferido-fijar \
+     --models-path ".specify/models.json" \
+     --cli "<nombre>"
+   ```
+
+3. **Efecto**: el campo raiz `preferido` se establece a `<nombre>`; el reparto de
+   fases y tareas se restringe a los modelos habilitados de ese agente.
+
+### Quitar agente preferido
+
+1. **Ejecutar**:
+
+   ```bash
+   python .specify/scripts/python/clis_config.py \
+     --accion preferido-quitar \
+     --models-path ".specify/models.json"
+   ```
+
+2. **Efecto**: se elimina el campo `preferido`; el reparto vuelve al modo sin
+   restriccion (todos los CLIs y modelos habilitados son candidatos).
+
 ## Reglas
 
 - Las ediciones manuales del usuario en `.specify/models.json` siempre prevalecen; no
   sobrescribir campos que no se estén modificando.
+- Los campos `deshabilitado` (nivel modelo) y `preferido` (nivel raiz) son de
+  control del usuario: nunca se generan, modifican ni borran por procesos
+  automáticos (escaneo, ranking, merge). Un re-scan de modelos nunca toca
+  estos campos, aunque actualice la lista de modelos disponibles.
 - La baja **jamás** borra o deshabilita sin confirmación explícita del usuario.
 - Estas operaciones **no gastan cuota**: solo leen/escriben `.specify/models.json` y
   escanean `tasks.md`.

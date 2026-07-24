@@ -3,7 +3,8 @@
 > Lógica portable (cualquier CLI principal la ejecuta). Contrato de entrada: la idea
 > del usuario, el flujo invocado (ECO/IDEAL), los flags (`-bypass`), y un
 > `.specify/models.json` válido. Salida: decisión de flujo + modelos por fase,
-> registrada en el reporte de orquestación. NO ejecuta ninguna fase.
+> registrada en el reporte de orquestación. NO ejecuta ninguna fase: el despacho
+> efectivo se resuelve en `.specify/orchestrator/dispatch-phase.md`.
 
 ## Quién ejecuta el triage
 
@@ -43,9 +44,12 @@ Registrar la justificación (una línea por indicador) en la sección Triage del
   candidato de `alta` (playbook `assign.md`) — equivocar el reparto es caro.
 - Volcar la tabla resultante en la sección "Modelos por fase" del reporte (estado
   `pendiente`).
-- **Alcance por etapas**: si `python .specify/scripts/python/invoke_secondary.py` aún no está disponible en el
-  proyecto, operar en modo decisión-solo: registrar los modelos por fase y ejecutar
-  las fases en el principal, anotándolo en Eventos.
+- **Ejecución del reparto**: con inventario válido, las fases asignadas a un modelo
+  distinto del principal se ejecutan efectivamente vía el playbook
+  `.specify/orchestrator/dispatch-phase.md`. El modo decisión-solo (registrar modelos
+  y ejecutar todo en el principal) queda solo como fallback cuando no hay inventario
+  válido, cuando el usuario pide modo clásico, o cuando `dispatch-phase.md` no está
+  disponible en el proyecto; toda caída al fallback se registra en Eventos del reporte.
 
 ## Paso 3 — Discordancia flujo invocado vs. recomendado
 

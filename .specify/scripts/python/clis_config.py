@@ -222,6 +222,70 @@ def get_active_cli_task_labels(models_path, nombre):
     return warnings
 
 
+def _find_modelo(entry, modelo_id):
+    for m in entry.get("modelos") or []:
+        if isinstance(m, dict) and str(m.get("id", "")) == str(modelo_id):
+            return m
+    return None
+
+
+def deshabilitar_modelo(models_path, nombre, modelo_id):
+    data = read_cli_inventory(models_path)
+    if nombre not in data["clis"]:
+        raise ValueError(f"CLI '{nombre}' no existe en el inventario")
+    entry = data["clis"][nombre]
+    modelo = _find_modelo(entry, modelo_id)
+    if modelo is None:
+        raise ValueError(f"El modelo '{modelo_id}' no existe en el CLI '{nombre}'")
+    warnings = [
+        w for w in get_active_cli_task_labels(models_path, nombre)
+        if f"{nombre}/{modelo_id}" in str(w)
+    ]
+    modelo["deshabilitado"] = True
+    save_cli_inventory(data, models_path)
+    return {"ok": True, "cambios": "modelo deshabilitado", "advertencias": warnings}
+
+
+def habilitar_modelo(models_path, nombre, modelo_id):
+    data = read_cli_inventory(models_path)
+    if nombre not in data["clis"]:
+        raise ValueError(f"CLI '{nombre}' no existe en el inventario")
+    entry = data["clis"][nombre]
+    modelo = _find_modelo(entry, modelo_id)
+    if modelo is None:
+        raise ValueError(f"El modelo '{modelo_id}' no existe en el CLI '{nombre}'")
+    modelo["deshabilitado"] = False
+    save_cli_inventory(data, models_path)
+    return {"ok": True, "cambios": "modelo habilitado", "advertencias": []}
+
+
+def fijar_preferido(models_path, nombre):
+    data = read_cli_inventory(models_path)
+    if nombre not in data["clis"]:
+        raise ValueError(f"CLI '{nombre}' no existe en el inventario")
+    warnings = []
+    entry = data["clis"][nombre]
+    if entry.get("deshabilitado"):
+        warnings.append(f"El CLI '{nombre}' esta deshabilitado")
+    modelos_habilitados = [
+        m for m in (entry.get("modelos") or [])
+        if not m.get("deshabilitado")
+    ]
+    if not modelos_habilitados:
+        warnings.append(f"El CLI '{nombre}' no tiene modelos habilitados")
+    data["preferido"] = nombre
+    _scan.write_json2(models_path, data)
+    return {"ok": True, "cambios": "preferido fijado", "advertencias": warnings}
+
+
+def quitar_preferido(models_path):
+    data = read_cli_inventory(models_path)
+    if "preferido" in data:
+        del data["preferido"]
+    _scan.write_json2(models_path, data)
+    return {"ok": True, "cambios": "preferido quitado", "advertencias": []}
+
+
 def remove_cli_definition(models_path, nombre, confirmado=False):
     if not confirmado:
         raise ValueError(f"Se requiere confirmacion explicita: repita con --confirmado para dar de baja '{nombre}'")
@@ -332,9 +396,13 @@ def _parse_modelos(raw):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Administra CLIs en models.json")
-    ap.add_argument("--accion", required=True, choices=["agregar", "editar", "eliminar", "verificar"])
+    ap.add_argument("--accion", required=True,
+                    choices=["agregar", "editar", "eliminar", "verificar",
+                             "modelo-deshabilitar", "modelo-habilitar",
+                             "preferido-fijar", "preferido-quitar"])
     ap.add_argument("--models-path", required=True)
-    ap.add_argument("--cli", required=True, dest="nombre")
+    ap.add_argument("--cli", default=None, dest="nombre")
+    ap.add_argument("--modelo", default=None)
     ap.add_argument("--headless", default=None)
     ap.add_argument("--modelos", default=None, help="JSON: lista de objetos modelo")
     ap.add_argument("--patrones-cuota", nargs="*", default=None)
@@ -347,14 +415,40 @@ def main(argv=None):
     if args.accion == "agregar":
         if args.headless is None or modelos is None:
             ap.error("agregar requiere --headless y --modelos")
+        if not args.nombre:
+            ap.error("agregar requiere --cli")
         result = add_cli_definition(args.models_path, args.nombre, args.headless, modelos,
                                     args.patrones_cuota, args.version_cmd)
     elif args.accion == "editar":
+        if not args.nombre:
+            ap.error("editar requiere --cli")
         result = edit_cli_definition(args.models_path, args.nombre, args.headless, modelos,
                                      args.patrones_cuota, args.version_cmd)
     elif args.accion == "eliminar":
+        if not args.nombre:
+            ap.error("eliminar requiere --cli")
         result = remove_cli_definition(args.models_path, args.nombre, args.confirmado)
+    elif args.accion == "modelo-deshabilitar":
+        if not args.nombre:
+            ap.error("modelo-deshabilitar requiere --cli")
+        if not args.modelo:
+            ap.error("modelo-deshabilitar requiere --modelo")
+        result = deshabilitar_modelo(args.models_path, args.nombre, args.modelo)
+    elif args.accion == "modelo-habilitar":
+        if not args.nombre:
+            ap.error("modelo-habilitar requiere --cli")
+        if not args.modelo:
+            ap.error("modelo-habilitar requiere --modelo")
+        result = habilitar_modelo(args.models_path, args.nombre, args.modelo)
+    elif args.accion == "preferido-fijar":
+        if not args.nombre:
+            ap.error("preferido-fijar requiere --cli")
+        result = fijar_preferido(args.models_path, args.nombre)
+    elif args.accion == "preferido-quitar":
+        result = quitar_preferido(args.models_path)
     else:
+        if not args.nombre:
+            ap.error("verificar requiere --cli")
         result = invoke_cli_verification(args.models_path, args.nombre, args.aprobar_prueba)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0

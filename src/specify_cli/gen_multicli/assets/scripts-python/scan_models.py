@@ -336,6 +336,8 @@ def build_asignacion(clis):
         if entry.get("deshabilitado"):
             continue
         for m in entry.get("modelos", []):
+            if m.get("deshabilitado"):
+                continue
             available.append({"ref": f"{cli}/{m.get('id')}",
                               "capacidad": m.get("capacidad", 0),
                               "costo": m.get("costo", 0)})
@@ -380,6 +382,8 @@ def build_asignacion_por_fase(clis, catalogo_clasificacion):
         if entry.get("deshabilitado"):
             continue
         for m in entry.get("modelos", []):
+            if m.get("deshabilitado"):
+                continue
             available.append({"ref": f"{cli}/{m.get('id')}",
                               "capacidad": m.get("capacidad", 0),
                               "costo": m.get("costo", 0),

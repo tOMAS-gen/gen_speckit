@@ -105,3 +105,142 @@ def test_remove_cli_definition_requires_confirmation_and_removes_non_catalog_cli
 
     assert result["cambio"] == "eliminado"
     assert "registered-cli" not in _read_inventory(inventory_path)["clis"]
+
+
+# Tests TDD para acciones modelo-* y preferido-* (feature 008)
+
+
+def _snapshot_inventory(models_path):
+    return json.loads(models_path.read_text(encoding="utf-8"))
+
+
+def _write_inventory(models_path, data):
+    models_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def test_deshabilitar_modelo_marca_modelo_como_deshabilitado(inventory_path):
+    result = clis_config.deshabilitar_modelo(inventory_path, "registered-cli", "base")
+
+    assert result["ok"] is True
+    assert result["cambios"] == "modelo deshabilitado"
+    modelo = _read_inventory(inventory_path)["clis"]["registered-cli"]["modelos"][0]
+    assert modelo.get("deshabilitado") is True
+
+
+def test_deshabilitar_modelo_falla_si_cli_no_existe_sin_escribir(inventory_path):
+    original = _snapshot_inventory(inventory_path)
+    with pytest.raises(ValueError, match="no existe en el inventario"):
+        clis_config.deshabilitar_modelo(inventory_path, "missing-cli", "base")
+
+    assert _read_inventory(inventory_path) == original
+
+
+def test_deshabilitar_modelo_falla_si_modelo_no_existe_sin_escribir(inventory_path):
+    original = _snapshot_inventory(inventory_path)
+    with pytest.raises(ValueError, match="modelo.*no existe"):
+        clis_config.deshabilitar_modelo(inventory_path, "registered-cli", "missing-model")
+
+    assert _read_inventory(inventory_path) == original
+
+
+def test_deshabilitar_modelo_advierte_tareas_pendientes_del_cli_modelo(inventory_path, tmp_path):
+    specs_dir = tmp_path / "specs" / "feature-008"
+    specs_dir.mkdir(parents=True)
+    (specs_dir / "tasks.md").write_text(
+        "- [ ] Tarea pendiente [M:registered-cli/base]\n", encoding="utf-8"
+    )
+
+    result = clis_config.deshabilitar_modelo(inventory_path, "registered-cli", "base")
+
+    assert result["ok"] is True
+    assert any("registered-cli/base" in str(w) for w in result["advertencias"])
+
+
+def test_habilitar_modelo_quita_deshabilitado(inventory_path):
+    data = _snapshot_inventory(inventory_path)
+    data["clis"]["registered-cli"]["modelos"][0]["deshabilitado"] = True
+    _write_inventory(inventory_path, data)
+
+    result = clis_config.habilitar_modelo(inventory_path, "registered-cli", "base")
+
+    assert result["ok"] is True
+    assert result["cambios"] == "modelo habilitado"
+    modelo = _read_inventory(inventory_path)["clis"]["registered-cli"]["modelos"][0]
+    assert modelo.get("deshabilitado") is not True
+
+
+def test_habilitar_modelo_falla_si_cli_no_existe_sin_escribir(inventory_path):
+    original = _snapshot_inventory(inventory_path)
+    with pytest.raises(ValueError, match="no existe en el inventario"):
+        clis_config.habilitar_modelo(inventory_path, "missing-cli", "base")
+
+    assert _read_inventory(inventory_path) == original
+
+
+def test_habilitar_modelo_falla_si_modelo_no_existe_sin_escribir(inventory_path):
+    original = _snapshot_inventory(inventory_path)
+    with pytest.raises(ValueError, match="modelo.*no existe"):
+        clis_config.habilitar_modelo(inventory_path, "registered-cli", "missing-model")
+
+    assert _read_inventory(inventory_path) == original
+
+
+def test_fijar_preferido_escribe_campo_preferido(inventory_path):
+    result = clis_config.fijar_preferido(inventory_path, "registered-cli")
+
+    assert result["ok"] is True
+    assert result["cambios"] == "preferido fijado"
+    assert _read_inventory(inventory_path)["preferido"] == "registered-cli"
+
+
+def test_fijar_preferido_falla_si_cli_no_existe_sin_escribir(inventory_path):
+    original = _snapshot_inventory(inventory_path)
+    with pytest.raises(ValueError, match="no existe en el inventario"):
+        clis_config.fijar_preferido(inventory_path, "missing-cli")
+
+    assert _read_inventory(inventory_path) == original
+
+
+def test_fijar_preferido_advierte_si_cli_esta_deshabilitado(inventory_path):
+    data = _snapshot_inventory(inventory_path)
+    data["clis"]["registered-cli"]["deshabilitado"] = True
+    _write_inventory(inventory_path, data)
+
+    result = clis_config.fijar_preferido(inventory_path, "registered-cli")
+
+    assert result["ok"] is True
+    assert result["cambios"] == "preferido fijado"
+    assert _read_inventory(inventory_path)["preferido"] == "registered-cli"
+    assert any("deshabilitado" in str(w).lower() for w in result["advertencias"])
+
+
+def test_fijar_preferido_advierte_si_no_hay_modelos_habilitados(inventory_path):
+    data = _snapshot_inventory(inventory_path)
+    data["clis"]["registered-cli"]["modelos"][0]["deshabilitado"] = True
+    _write_inventory(inventory_path, data)
+
+    result = clis_config.fijar_preferido(inventory_path, "registered-cli")
+
+    assert result["ok"] is True
+    assert result["cambios"] == "preferido fijado"
+    assert _read_inventory(inventory_path)["preferido"] == "registered-cli"
+    assert any("habilitados" in str(w).lower() for w in result["advertencias"])
+
+
+def test_quitar_preferido_elimina_campo_preferido(inventory_path):
+    data = _snapshot_inventory(inventory_path)
+    data["preferido"] = "registered-cli"
+    _write_inventory(inventory_path, data)
+
+    result = clis_config.quitar_preferido(inventory_path)
+
+    assert result["ok"] is True
+    assert result["cambios"] == "preferido quitado"
+    assert "preferido" not in _read_inventory(inventory_path)
+
+
+def test_quitar_preferido_es_noop_si_no_hay_preferido(inventory_path):
+    result = clis_config.quitar_preferido(inventory_path)
+
+    assert result["ok"] is True
+    assert "preferido" not in _read_inventory(inventory_path)

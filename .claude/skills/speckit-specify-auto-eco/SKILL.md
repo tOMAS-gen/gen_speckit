@@ -45,9 +45,17 @@ ANTES de la Fase 1:
 
 1. **Orden estricto**: `specify → plan → tasks → [gate] → implement`. Sin fases
    opcionales (clarify, checklist, analyze) — ese es el punto del flujo ECO.
-2. **Cada fase invoca la skill base correspondiente** (`speckit-specify`,
+2. **Cada fase se ejecuta invocando la skill base correspondiente** (`speckit-specify`,
    `speckit-plan`, `speckit-tasks`, `speckit-implement`) siguiendo sus instrucciones
-   completas. No reimplementar lo que la skill base hace.
+   completas. No reimplementar lo que la skill base hace. **Excepción — despacho de
+   fases** (con `.specify/models.json` válido): antes de ejecutar cada fase, consultar
+   la tabla "Modelos por fase" del reporte de orquestación; si el modelo asignado NO
+   es el principal, ejecutar la fase vía el playbook `.specify/orchestrator/dispatch-phase.md`
+   (el secundario produce el artefacto siguiendo las instrucciones de la skill base
+   empaquetadas en el prompt de fase; el principal verifica en 2 niveles y cierra la
+   fila con `Efectivo` + estado). Si el asignado es el principal, no hay candidatos con
+   cuota, no hay inventario, o el usuario pidió modo clásico → ejecutar la skill base
+   en sesión como siempre (FR-013) y registrarlo.
 3. **Una fase termina antes de empezar la siguiente.** Si una falla, detener,
    reportar estado y qué falta para retomar.
 4. **Frenos solo ante dudas reales**: preguntas de clarificación que la skill specify
@@ -63,6 +71,9 @@ Antes de empezar, revisar `.specify/feature.json` y el directorio de la feature:
 - **Artefacto incompleto o corrupto** (no parsea, le faltan secciones obligatorias de
   su template): tratarlo como faltante — informar qué tiene de malo y ofrecer
   regenerarlo desde esa fase. NUNCA continuar en silencio sobre un artefacto inválido.
+- **Con despacho de fases activo**: releer la tabla "Modelos por fase" del reporte y
+  ejecutar solo las filas `pendiente`, reutilizando los intermedios de
+  `specs/<feature>/.phase-dispatch/` si existen.
 - **En implement**: retomar = despachar solo tareas sin `[X]`, reconstruyendo el
   estado desde `tasks.md` y el reporte de orquestación.
 
@@ -108,8 +119,18 @@ e informar por qué.
 
 ## Reporte final
 
-Al terminar (o detenerse): directorio y artefactos generados, fases completadas,
-decisiones del triage, tareas completadas vs. pendientes, y próximo paso sugerido.
+Al terminar (o detenerse), reportar:
+
+- Directorio de la feature y artefactos generados
+- Fases completadas y fase donde se detuvo (si aplica)
+- Decisiones del triage
+- Tareas completadas vs. pendientes
+- Con despacho de fases activo: en la sección Métricas de
+  `orchestration-report.md`, incluir el desglose de fases por modelo Efectivo y el
+  porcentaje del trabajo total (fases + tareas) ejecutado por modelos económicos
+  (costo < 3)
+- Próximo paso sugerido
+
 Actualizar `orchestration-report.md` en cada fase.
 
 ## Cuándo termina

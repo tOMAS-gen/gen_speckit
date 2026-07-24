@@ -53,7 +53,10 @@ def test_skills_entregadas(project_root: Path) -> None:
 
 
 def test_orchestrator_playbooks(project_root: Path) -> None:
-    assert (project_root / ".specify" / "orchestrator" / "triage.md").is_file()
+    orchestrator_dir = project_root / ".specify" / "orchestrator"
+    for playbook in ("triage.md", "assign.md", "orchestrate.md",
+                     "dispatch-phase.md", "report-template.md", "README.md"):
+        assert (orchestrator_dir / playbook).is_file(), f"falta {orchestrator_dir / playbook}"
 
 
 def test_scripts_powershell(project_root: Path) -> None:
@@ -80,8 +83,13 @@ def test_python_scripts_deposited(tmp_path: Path) -> None:
         "clis_config.py",
         "platform_helper.py",
         "classify_models.py",
+        "phase_candidates.py",
     ):
         assert (scripts_dir / script).is_file(), f"falta {scripts_dir / script}"
+
+    orchestrator_dir = tmp_path / ".specify" / "orchestrator"
+    assert (orchestrator_dir / "dispatch-phase.md").is_file(), \
+        f"falta {orchestrator_dir / 'dispatch-phase.md'}"
 
 
 def test_catalogo_clis(project_root: Path) -> None:

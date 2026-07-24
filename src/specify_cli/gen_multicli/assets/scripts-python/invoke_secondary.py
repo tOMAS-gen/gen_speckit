@@ -5,8 +5,14 @@ Genérico: sin nombres de CLI hardcodeados. El comando sale de la plantilla ``he
 inventario (`models.json`); los patrones de cuota y los hints de ejecutable se resuelven
 inventario > catálogo > defaults genéricos. Portable (Windows/Linux/macOS) vía platform.py.
 
-Salida: JSON {clasificacion, intentos, exitCode, stdoutPath, stderrPath, comando}.
+Salida: JSON {clasificacion, intentos, exitCode, stdoutPath, stderrPath, comando, promptFile}.
 clasificacion ∈ {exito, cuota_agotada, indisponible}. Exit 0 solo si 'exito'.
+
+Prompts largos (feature 008): `--prompt-file <ruta>` (mutuamente excluyente con
+`--prompt`) transfiere las instrucciones por archivo — el comando headless lleva solo
+un puntero corto a la ruta, evitando el límite de línea de comandos (~8191 chars en
+cmd.exe) y el colapso de whitespace del prompt inline. El archivo debe existir, no
+estar vacío y vivir dentro del directorio de trabajo (repo).
 
 Seguridad (FR-006): ejecuta dentro de --working-directory (repo), no vuelca env/credenciales
 a los logs, timeout acotado y 1 solo reintento ante fallo transitorio.
@@ -103,9 +109,40 @@ def test_quota_pattern(patterns, text):
     return False
 
 
+def build_pointer_prompt(prompt_file, working_directory):
+    """Valida el archivo de prompt y devuelve (puntero_corto, ruta_relativa).
+
+    Reglas (contracts/prompt-file.md): el archivo debe existir, ser legible (UTF-8),
+    no estar vacío y estar DENTRO de working_directory. El contenido NUNCA se
+    interpola en la línea de comandos: el prompt real es un puntero corto.
+    Lanza ValueError con mensaje claro ante cualquier violación.
+    """
+    path = Path(prompt_file).resolve()
+    base = Path(working_directory).resolve()
+    if not path.is_file():
+        raise ValueError(f"--prompt-file: el archivo no existe: {path}")
+    try:
+        path.relative_to(base)
+    except ValueError:
+        raise ValueError(
+            f"--prompt-file: el archivo está fuera del repositorio ({path} no está bajo {base})")
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"--prompt-file: no se pudo leer {path}: {exc}")
+    if not content.strip():
+        raise ValueError(f"--prompt-file: el archivo está vacío: {path}")
+    rel = path.relative_to(base).as_posix()
+    pointer = (
+        f"Lee el archivo {rel} y ejecuta COMPLETAS las instrucciones que contiene. "
+        f"Trabaja solo dentro de este repositorio. Al terminar, lista los archivos que escribiste."
+    )
+    return pointer, rel
+
+
 def invoke_secondary_task(cli, model, prompt, inventory, catalog, log_dir,
                           log_base_name="tarea", timeout_seconds=900,
-                          working_directory=None):
+                          working_directory=None, prompt_file_rel=None):
     working_directory = working_directory or str(Path.cwd())
     Path(log_dir).mkdir(parents=True, exist_ok=True)
     command = get_headless_command(inventory, cli, model, prompt)
@@ -152,6 +189,7 @@ def invoke_secondary_task(cli, model, prompt, inventory, catalog, log_dir,
         "stdoutPath": out_file,
         "stderrPath": err_file,
         "comando": command,
+        "promptFile": prompt_file_rel,
     }
 
 
@@ -159,7 +197,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Despacho headless a un CLI secundario")
     ap.add_argument("--cli", required=True)
     ap.add_argument("--model", default="")
-    ap.add_argument("--prompt", required=True)
+    prompt_group = ap.add_mutually_exclusive_group(required=True)
+    prompt_group.add_argument("--prompt")
+    prompt_group.add_argument("--prompt-file", dest="prompt_file")
     ap.add_argument("--models-path", required=True)
     ap.add_argument("--log-dir", required=True)
     ap.add_argument("--log-base-name", default="tarea")
@@ -169,9 +209,20 @@ def main(argv=None):
 
     inventory = load_json(args.models_path)
     catalog = get_catalog(args.models_path)
+
+    prompt = args.prompt
+    prompt_file_rel = None
+    if args.prompt_file:
+        working_directory = args.working_directory or str(Path.cwd())
+        try:
+            prompt, prompt_file_rel = build_pointer_prompt(args.prompt_file, working_directory)
+        except ValueError as exc:
+            ap.error(str(exc))  # exit 2, consistente con errores de argumentos
+
     result = invoke_secondary_task(
-        args.cli, args.model, args.prompt, inventory, catalog,
+        args.cli, args.model, prompt, inventory, catalog,
         args.log_dir, args.log_base_name, args.timeout, args.working_directory,
+        prompt_file_rel=prompt_file_rel,
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0 if result["clasificacion"] == "exito" else 1
