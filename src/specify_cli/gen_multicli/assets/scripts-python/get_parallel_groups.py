@@ -18,12 +18,14 @@ import sys
 from pathlib import Path
 
 # Regex del contrato task-labels.md (grupos: id, P, US, complejidad, cli, modelo, descripcion)
+# El modelo admite "/" para agentes multi-modelo cuyo id incluye proveedor
+# (ej. [M:opencode/cc/claude-fable-5]): el CLI es el primer segmento, el resto es el id.
 TASK_LINE_REGEX = re.compile(
     r"^\s*- \[( |x|X)\] +(T\d{3,}) +"
     r"(?:(\[P\]) +)?"
     r"(?:(\[US\d+\]) +)?"
     r"(?:\[C:(baja|media|alta)\] +)?"
-    r"(?:\[M:([a-z][a-z0-9-]*)/([A-Za-z0-9._-]+)\] +)?"
+    r"(?:\[M:([a-z][a-z0-9-]*)/([A-Za-z0-9._/-]+)\] +)?"
     r"(.+)$"
 )
 
