@@ -44,6 +44,14 @@ que cumpla:
 1. `cuota != "agotada"` en su CLI (si `cuota_reset` ya venció, tratarla como `ok`).
 2. `contexto_k` suficiente para la tarea (estimar: tarea + archivos que toca + spec
    relevante; ante la duda con `contexto_k` desconocido, asumir que alcanza).
+3. **Habilitación**: excluir candidatos cuyo CLI tiene `deshabilitado: true` o cuyo
+   modelo tiene `deshabilitado: true` en `modelos[]` (decisión del usuario; los
+   rankings recién regenerados ya vienen filtrados, pero un inventario editado a mano
+   después del scan puede contener refs deshabilitadas).
+4. **Preferido**: si el inventario tiene `preferido: "<cli>"` a nivel raíz, conservar
+   solo candidatos de ese agente. Registrar en Eventos (una vez por corrida) que la
+   restricción es una decisión del usuario. Si el valor no existe en `clis`,
+   ignorarlo con advertencia.
 
 Si ningún candidato del nivel califica → escalar al nivel superior (baja→media→alta) y
 registrar el motivo en Eventos. Si tampoco → dejar la tarea SIN `[M:]` y reportarla

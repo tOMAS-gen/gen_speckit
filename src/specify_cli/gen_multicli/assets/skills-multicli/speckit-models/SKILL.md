@@ -191,3 +191,26 @@ manuales del usuario SIEMPRE prevalecen (FR-004).
   ediciones del usuario automáticamente; ante conflicto irresoluble, preguntar.
 - Si un CLI está instalado pero no autenticado, avisar al usuario cómo autenticarlo
   (login interactivo del propio CLI) — no intentar autenticar por él.
+
+## Agentes multi-modelo
+
+Agentes como OpenCode o Hermes que exponen varios modelos en el mismo agente se
+registran por el flujo existente de `speckit-clis`, declarando:
+
+- Plantilla `headless` con placeholders `{prompt}` y `{modelo}` (V2/V3 que permiten
+  selección de modelo).
+- Campo `modelos[]` con un elemento por modelo expuesto (id, capacidad, costo,
+  contexto_k — detectados, clasificados por feature 007 o declarados).
+
+Cada modelo del agente participa como candidato individual `agente/modelo` en los
+rankings de asignación (`asignacion`, `asignacion_por_fase`), junto con los modelos
+de los demás agentes.
+
+Un agente cuyo comando headless no permite seleccionar modelo participa igualmente
+con su modelo por defecto como único candidato — regla FR-008 — registrado con
+`modelos[]` de un solo elemento. Estos agentes nunca se excluyen del inventario por
+falta de selección.
+
+Estos agentes **no están en el catálogo versionado** (`.specify/clis-catalog.json`):
+los registra el usuario directamente, y sus capacidades se obtienen por la
+clasificación automática (feature 007) o por declaración manual.
