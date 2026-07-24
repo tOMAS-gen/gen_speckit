@@ -1,122 +1,80 @@
 # gen_speckit
 
-<!-- speckit:objetivo:inicio -->
-## Objetivo
+gen_speckit es una version de `specify-cli` enfocada en que puedas usar Spec Kit con
+flujos multi-CLI desde un solo punto de entrada.
 
-Un **fork del [Spec Kit de GitHub](https://github.com/github/spec-kit)** con un
-orquestador multi-CLI (Claude Code, Codex y Kimi) integrado dentro del propio
-`specify-cli`: el usuario solo escribe la idea y el sistema clasifica su complejidad
-(triage), elige el flujo y el modelo para cada fase y cada tarea, y despacha el trabajo
-al modelo más económico que alcance — reservando los caros para las decisiones que lo
-justifican. Un único `specify init` instala base + producto, y corre en cualquier
-entorno con solo Python. Todo de forma estrictamente aditiva sobre spec-kit.
+## Requisitos
 
-_Actualizado: 2026-07-18_
-<!-- speckit:objetivo:fin -->
+- Python 3.11 o superior
+- `uv`
+- Al menos un CLI de IA instalado, por ejemplo Claude Code, Codex CLI o Kimi CLI
 
-<!-- speckit:alcance:inicio -->
-## Alcance
+## Instalacion
 
-**Es**: fork de spec-kit con las mejoras multi-CLI dentro de `specify-cli` (un solo
-`specify init`); skills y playbooks Markdown portables; scripts de soporte en **Python**
-(multiplataforma); inventario y ranking de modelos (`models.json`) enriquecido con el
-nivel medido contra un leaderboard público y un reparto por tipo de fase, con la
-clasificación y los planes contratados compartidos una sola vez por máquina; pipelines
-de una sola llamada (IDEAL y ECO); asignación de tareas por complejidad; orquestación con
-despacho headless, paralelismo y fallback por cuota; especificador de agentes y README
-gestionado.
-
-**No es**: no modifica las skills base ni el formato de artefactos de spec-kit; no usa
-API keys (solo los CLIs con sus suscripciones).
-
-_Actualizado: 2026-07-21_
-<!-- speckit:alcance:fin -->
-
-<!-- speckit:estado:inicio -->
-## Estado
-
-| Feature | Fase | Avance |
-|---|---|---|
-| 001 — Orquestador Multi-CLI | Implementada | Despacho real a los 3 CLIs validado en producción |
-| 002 — Especificador de Agentes y README | Implementada | 7 agentes del proyecto generados y aprobados |
-| 003 — Soporte Genérico de CLIs y Multiplataforma | Implementada | Cualquier CLI registrable sin tocar código |
-| 004 — Fork de specify-cli (init de un solo paso) | Implementada | `specify init` entrega base + producto, validado con el CLI real |
-| 005 — Scripts de soporte en Python (multiplataforma) | Implementada | Corre con solo Python; CI verde en Windows/Linux/macOS |
-| 006 — Descubrimiento real de modelos por CLI | Implementada | Modelos reales detectados por CLI (config local + verificación web best-effort) |
-| 007 — Clasificación de modelos por nivel y tarea (arena.ai) | Implementada | Nivel medido contra leaderboard público; reparto por fase; clasificación compartida por máquina |
-
-_Actualizado: 2026-07-21_
-<!-- speckit:estado:fin -->
-
-## Instalación
+Instalar la herramienta una sola vez por maquina:
 
 ```bash
-# 1) Instalar (una sola vez por máquina; reemplaza al specify oficial):
 uv tool install specify-cli --force --from git+https://github.com/tOMAS-gen/gen_speckit.git
-
-# 2) En la carpeta de tu proyecto — un solo init instala TODO (base + multi-CLI):
-specify init . --integration claude --script ps
 ```
 
-Con `--skills claude|codex|kimi|todos` elegís a qué agente(s) van las skills multi-CLI
-(por defecto, el mismo de `--integration`).
+Inicializarla dentro de tu proyecto:
 
-**Requisitos**: Python ≥3.11 (Windows / Linux / macOS), [uv](https://docs.astral.sh/uv/),
-y los CLIs de IA instalados ([Claude Code](https://claude.com/claude-code), Codex CLI,
-Kimi CLI).
+```bash
+specify init . --script ps
+```
 
-## Qué lo diferencia del spec-kit original
+Ese comando abre el selector interactivo para elegir la integracion.
 
-Todo lo del spec-kit oficial funciona **exactamente igual** (mismas skills, mismos
-artefactos, mismas opciones). gen_speckit **agrega** un sistema multi-CLI donde solo
-ponés la idea:
+Si preferis fijarla manualmente, podes indicar una integracion concreta:
 
-- **Una sola llamada** ejecuta todo el circuito (triage → specify → … → implement).
-- **Triage**: clasifica la complejidad de la idea y decide flujo (ECO/IDEAL) y qué
-  modelo ejecuta cada fase.
-- **Asignación por tarea**: cada tarea de `tasks.md` se etiqueta con complejidad
-  (`[C:baja|media|alta]`) y modelo responsable (`[M:cli/modelo]`).
-- **Orquestación**: despacha cada tarea a su CLI (Claude/Codex/Kimi) en headless, en
-  paralelo cuando se puede, con fallback automático si un modelo agota cuota — el
-  principal verifica e integra.
-- **Objetivo**: reducir costo y uso — el grueso del trabajo va a los modelos económicos;
-  los caros solo donde hacen la diferencia.
+```bash
+specify init . --integration codex --script ps
+```
 
-## Comandos
+Si queres instalar las skills multi-CLI para otro agente, podes usar `--skills`:
 
-### Base (del spec-kit oficial)
+```bash
+specify init . --integration codex --script ps --skills todos
+```
 
-| Comando | Qué hace |
+## Uso Recomendado
+
+1. Ejecutar `/speckit-models` una vez por maquina para registrar y ordenar los modelos disponibles.
+2. Ejecutar `/speckit-specify-auto "tu idea"` para correr el flujo completo.
+3. Si la idea es simple o queres un flujo mas corto, usar `/speckit-specify-auto-eco "tu idea"`.
+
+## Comandos Principales
+
+| Comando | Uso |
 |---|---|
-| `/speckit-constitution` | Principios del proyecto |
-| `/speckit-specify` | Crear la especificación |
-| `/speckit-clarify` | Preguntas de clarificación |
-| `/speckit-plan` | Plan de implementación |
-| `/speckit-tasks` | Generar `tasks.md` |
-| `/speckit-checklist` | Checklists de calidad |
-| `/speckit-analyze` | Consistencia spec/plan/tasks |
-| `/speckit-implement` | Ejecutar las tareas |
-| `/speckit-converge` | Detectar trabajo faltante y sumarlo como tareas |
-| `/speckit-taskstoissues` | Tareas → issues de GitHub |
+| `/speckit-models` | Detecta y configura modelos disponibles |
+| `/speckit-clis` | Registrar, editar o verificar CLIs |
+| `/speckit-specify-auto "idea"` | Corre el flujo completo recomendado |
+| `/speckit-specify-auto-eco "idea"` | Corre un flujo reducido para ideas simples |
+| `/speckit-orchestrate` | Ejecuta la implementacion orquestada cuando ya existe `tasks.md` |
+| `/speckit-agents` | Genera agentes del proyecto |
+| `/speckit-readme` | Actualiza el README gestionado del proyecto |
 
-### Multi-CLI (agregados por gen_speckit)
+## Comandos Base De Spec Kit
 
-| Comando | Qué hace |
-|---|---|
-| `/speckit-specify-auto "idea"` | ⭐ **Todo el circuito con una sola llamada** (triage + 7 fases + orquestación) |
-| `/speckit-specify-auto-eco "idea"` | Ciclo mínimo (4 fases) para ideas simples |
-| `/speckit-models` | Inventario y ranking de CLIs/modelos → `.specify/models.json` (una vez por máquina) |
-| `/speckit-clis` | Registrar / editar / verificar / dar de baja cualquier CLI |
-| `/speckit-orchestrate` | Fase implement orquestada suelta (con `tasks.md` ya etiquetado) |
-| `/speckit-agents` | Especificador de agentes del proyecto |
-| `/speckit-readme` | README gestionado (objetivo / alcance / estado) |
-| `/speckit-constitution-plus` | Constitution base + ofrece el especificador de agentes |
+Si preferis ejecutar el flujo paso por paso, tambien tenes disponibles los comandos base:
 
-**Uso típico**: `/speckit-models` (una vez) → `/speckit-specify-auto "tu idea"` — el
-resto lo decide el sistema. Flags de los pipelines: `-bypass` (no frena en el gate si no
-hay dudas) y `--sin-implementar` (solo planificación).
+- `/speckit-constitution`
+- `/speckit-specify`
+- `/speckit-clarify`
+- `/speckit-plan`
+- `/speckit-tasks`
+- `/speckit-checklist`
+- `/speckit-analyze`
+- `/speckit-implement`
+- `/speckit-converge`
+- `/speckit-taskstoissues`
 
----
+## Flujo Tipico
 
-Para el desarrollo del fork (relación con upstream, build, tests), ver
-[`UPSTREAM.md`](UPSTREAM.md).
+```text
+/speckit-models
+/speckit-specify-auto "tu idea"
+```
+
+Con eso, el sistema decide el flujo y reparte el trabajo segun los modelos disponibles.
